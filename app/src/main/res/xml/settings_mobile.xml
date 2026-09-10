@@ -310,6 +310,11 @@
                 android:title="@string/settings_provider_domain_reset"
                 android:summary="@string/settings_provider_domain_reset_summary" />
 
+            <Preference
+                android:key="provider_domain_generic_check"
+                android:title="@string/settings_provider_domain_check"
+                android:summary="@string/settings_provider_domain_check_summary" />
+
         </PreferenceCategory>
 
         <PreferenceCategory

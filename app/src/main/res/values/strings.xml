@@ -598,4 +598,10 @@
     <string name="settings_parental_tmdb_disable_blocked">You must unlock parental controls before disabling TMDb.</string>
     <string name="settings_force_extra_buffer_title">Global Extra Buffering</string>
     <string name="settings_force_extra_buffer_summary">Enable extra buffering for all servers by default</string>
+
+    <string name="settings_provider_domain_check">Check / update domain</string>
+    <string name="settings_provider_domain_check_summary">Follow redirects and automatically save a new provider domain</string>
+    <string name="settings_provider_domain_check_current">Domain is already current</string>
+    <string name="settings_provider_domain_check_updated">New domain saved: %1$s</string>
+    <string name="settings_provider_domain_check_failed">Domain check failed: %1$s</string>
 </resources>
