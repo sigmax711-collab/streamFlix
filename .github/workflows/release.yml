@@ -68,7 +68,7 @@ jobs:
       - name: Prepare Universal APK
         run: |
           mkdir -p final_apks
-          cp ${{ steps.sign_apk.outputs.signedReleaseFile }} final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}.apk
+          mv app/build/outputs/apk/release/*-signed.apk final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}.apk
 
 
       - name: Set Mobile version
@@ -92,7 +92,7 @@ jobs:
 
       - name: Prepare Mobile APK
         run: |
-          cp ${{ steps.sign_apk_mobile.outputs.signedReleaseFile }} final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-mobile.apk
+          mv app/build/outputs/apk/release/*-signed.apk final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-mobile.apk
 
 
       - name: Set TV version
@@ -116,7 +116,7 @@ jobs:
 
       - name: Prepare TV APK
         run: |
-          cp ${{ steps.sign_apk_tv.outputs.signedReleaseFile }} final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-tv.apk
+          mv app/build/outputs/apk/release/*-signed.apk final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-tv.apk
 
       - name: Release to git.gay
         uses: https://gitea.com/actions/release-action@main
