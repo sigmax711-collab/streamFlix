@@ -65,24 +65,10 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      - name: Create Release
-        id: create_release
-        uses: https://github.com/actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-
-      - name: Upload Release APK
-        uses: https://github.com/actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.sign_apk.outputs.signedReleaseFile }}
-          asset_name: ${{ github.event.repository.name }}-${{ github.ref_name }}.apk
-          asset_content_type: application/zip
+      - name: Prepare Universal APK
+        run: |
+          mkdir -p final_apks
+          cp ${{ steps.sign_apk.outputs.signedReleaseFile }} final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}.apk
 
 
       - name: Set Mobile version
@@ -104,15 +90,9 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      - name: Upload Release APK
-        uses: https://github.com/actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.sign_apk_mobile.outputs.signedReleaseFile }}
-          asset_name: ${{ github.event.repository.name }}-${{ github.ref_name }}-only-mobile.apk
-          asset_content_type: application/zip
+      - name: Prepare Mobile APK
+        run: |
+          cp ${{ steps.sign_apk_mobile.outputs.signedReleaseFile }} final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-mobile.apk
 
 
       - name: Set TV version
@@ -134,12 +114,12 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      - name: Upload Release APK
-        uses: https://github.com/actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare TV APK
+        run: |
+          cp ${{ steps.sign_apk_tv.outputs.signedReleaseFile }} final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-tv.apk
+
+      - name: Release to git.gay
+        uses: https://gitea.com/actions/release-action@main
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.sign_apk_tv.outputs.signedReleaseFile }}
-          asset_name: ${{ github.event.repository.name }}-${{ github.ref_name }}-only-tv.apk
-          asset_content_type: application/zip
+          files: final_apks/*.apk
+          api_key: '${{ secrets.GITHUB_TOKEN }}'
