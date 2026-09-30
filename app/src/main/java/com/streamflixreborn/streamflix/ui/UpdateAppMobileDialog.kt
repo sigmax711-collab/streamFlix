@@ -8,11 +8,11 @@ import android.view.WindowManager
 import androidx.core.view.isVisible
 import com.streamflixreborn.streamflix.BuildConfig
 import com.streamflixreborn.streamflix.databinding.DialogUpdateAppMobileBinding
-import com.streamflixreborn.streamflix.utils.GitHub
+import com.streamflixreborn.streamflix.utils.GitGay
 
 class UpdateAppMobileDialog(
     context: Context,
-    newReleases: List<GitHub.Release>,
+    newReleases: List<GitGay.Release>,
 ) : Dialog(context) {
 
     private val binding = DialogUpdateAppMobileBinding.inflate(LayoutInflater.from(context))

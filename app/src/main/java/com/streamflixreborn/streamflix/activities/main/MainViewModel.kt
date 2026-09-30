@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.streamflixreborn.streamflix.BuildConfig
-import com.streamflixreborn.streamflix.utils.GitHub
+import com.streamflixreborn.streamflix.utils.GitGay
 import com.streamflixreborn.streamflix.utils.InAppUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +22,7 @@ class MainViewModel : ViewModel() {
 
     sealed class State {
         data object CheckingUpdate : State()
-        data class SuccessCheckingUpdate(val newReleases: List<GitHub.Release>, val asset: GitHub.Release.Asset) : State()
+        data class SuccessCheckingUpdate(val newReleases: List<GitGay.Release>, val asset: GitGay.Release.Asset) : State()
 
         data object DownloadingUpdate : State()
         data class SuccessDownloadingUpdate(val apk: File) : State()
@@ -61,7 +61,7 @@ class MainViewModel : ViewModel() {
 
     fun downloadUpdate(
         context: Context,
-        asset: GitHub.Release.Asset,
+        asset: GitGay.Release.Asset,
     ) = viewModelScope.launch(Dispatchers.IO) {
         _state.emit(State.DownloadingUpdate)
 

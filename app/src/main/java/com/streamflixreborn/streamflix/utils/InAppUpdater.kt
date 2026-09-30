@@ -31,8 +31,8 @@ object InAppUpdater {
         }
     }
 
-    suspend fun getReleaseUpdate(): GitHub.Release? {
-        val latestRelease = GitHub.Releases.getLatestRelease(REPO_OWNER, REPO_NAME)
+    suspend fun getReleaseUpdate(): GitGay.Release? {
+        val latestRelease = GitGay.Releases.getLatestRelease(REPO_OWNER, REPO_NAME)
         val currentVersion = BuildConfig.VERSION_NAME
 
         if (Version(latestRelease.tagName.substringAfter("v")) > Version(currentVersion)) {
@@ -41,8 +41,8 @@ object InAppUpdater {
         return null
     }
 
-    suspend fun getNewReleases(): List<GitHub.Release> {
-        val releases = GitHub.Releases.getReleases(REPO_OWNER, REPO_NAME)
+    suspend fun getNewReleases(): List<GitGay.Release> {
+        val releases = GitGay.Releases.getReleases(REPO_OWNER, REPO_NAME)
         val currentVersion = BuildConfig.VERSION_NAME
 
         val newReleases = releases
@@ -51,7 +51,7 @@ object InAppUpdater {
         return newReleases
     }
 
-    suspend fun downloadApk(context: Context, asset: GitHub.Release.Asset): File {
+    suspend fun downloadApk(context: Context, asset: GitGay.Release.Asset): File {
         context.cacheDir.listFiles()
             ?.filter { it.extension == "apk" }
             ?.forEach { it.deleteOnExit() }
