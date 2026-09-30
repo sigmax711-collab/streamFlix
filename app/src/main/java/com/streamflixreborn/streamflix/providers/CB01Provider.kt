@@ -678,7 +678,7 @@ object CB01Provider : Provider {
                 if (directResp.isSuccessful) {
                     val body = directResp.body?.string()?.trim().orEmpty()
                     if (body.isNotBlank() && body != "not found" && !body.contains("<") && !body.contains(" ")) {
-                        return "https://maxstream.video/emihiuhi/$body"
+                        return "https://maxstream.video/emilpy0n/$body"
                     }
                 }
             }
@@ -721,7 +721,7 @@ object CB01Provider : Provider {
                 }
 
                 if (responseText.isBlank() || responseText.contains("<") || responseText.contains(" ")) return null
-                return "https://maxstream.video/emihiuhi/$responseText"
+                return "https://maxstream.video/emilpy0n/$responseText"
             }
 
             null

@@ -14,8 +14,8 @@ import kotlin.math.max
 
 object InAppUpdater {
 
-    private const val GITHUB_OWNER = "streamflix-reborn2"
-    private const val GITHUB_REPO = "streamflix"
+    private const val REPO_OWNER = "streamflix-reborn2"
+    private const val REPO_NAME = "streamflix"
 
     private data class Version(val name: String) : Comparable<Version> {
         override operator fun compareTo(other: Version): Int {
@@ -32,7 +32,7 @@ object InAppUpdater {
     }
 
     suspend fun getReleaseUpdate(): GitHub.Release? {
-        val latestRelease = GitHub.Releases.getLatestRelease(GITHUB_OWNER, GITHUB_REPO)
+        val latestRelease = GitHub.Releases.getLatestRelease(REPO_OWNER, REPO_NAME)
         val currentVersion = BuildConfig.VERSION_NAME
 
         if (Version(latestRelease.tagName.substringAfter("v")) > Version(currentVersion)) {
@@ -42,7 +42,7 @@ object InAppUpdater {
     }
 
     suspend fun getNewReleases(): List<GitHub.Release> {
-        val releases = GitHub.Releases.getReleases(GITHUB_OWNER, GITHUB_REPO)
+        val releases = GitHub.Releases.getReleases(REPO_OWNER, REPO_NAME)
         val currentVersion = BuildConfig.VERSION_NAME
 
         val newReleases = releases
