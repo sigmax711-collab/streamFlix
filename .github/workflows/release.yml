@@ -118,6 +118,11 @@ jobs:
         run: |
           mv app/build/outputs/apk/release/*-signed.apk final_apks/${{ github.event.repository.name }}-${{ github.ref_name }}-only-tv.apk
 
+      - name: Setup Go
+        uses: https://github.com/actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
       - name: Release to git.gay
         uses: https://gitea.com/actions/release-action@main
         with:
