@@ -381,7 +381,38 @@ class PlayerTvFragment : Fragment() {
                         is PlayerViewModel.State.FailedLoadingServers -> {
                             Toast.makeText(
                                 requireContext(),
-                                state.error.message ?: "",
+                                run {
+                                    val provider = UserPreferences.currentProvider
+                                    val isVavooVod =
+                                        provider?.name?.contains(
+                                            "Vavoo VOD",
+                                            ignoreCase = true
+                                        ) == true
+
+                                    if (
+                                        isVavooVod &&
+                                        state.error.message == "No servers found"
+                                    ) {
+                                        val langCode = provider?.language.orEmpty()
+                                        val locale = Locale.forLanguageTag(langCode)
+                                        val langDisplayName =
+                                            locale.getDisplayLanguage(Locale.getDefault())
+                                                .replaceFirstChar {
+                                                    if (it.isLowerCase()) {
+                                                        it.titlecase(Locale.getDefault())
+                                                    } else {
+                                                        it.toString()
+                                                    }
+                                                }
+
+                                        getString(
+                                            R.string.player_vavoo_vod_not_available_lang_message,
+                                            langDisplayName
+                                        )
+                                    } else {
+                                        state.error.message ?: ""
+                                    }
+                                },
                                 Toast.LENGTH_LONG
                             ).show()
                             findNavController().navigateUp()

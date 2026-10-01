@@ -592,4 +592,5 @@
     <string name="settings_parental_tmdb_disable_blocked">You must unlock parental controls before disabling TMDb.</string>
     <string name="settings_force_extra_buffer_title">Global Extra Buffering</string>
     <string name="settings_force_extra_buffer_summary">Enable extra buffering for all servers by default</string>
+    <string name="player_vavoo_vod_not_available_lang_message">Not available in %s, search for it on Vavoo VOD in other languages</string>
 </resources>
