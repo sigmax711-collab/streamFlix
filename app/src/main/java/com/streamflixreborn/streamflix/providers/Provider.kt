@@ -103,6 +103,7 @@ interface Provider {
             GuardaSerieProvider to ProviderSupport(movies = true, tvShows = true),
             EinschaltenProvider to ProviderSupport(movies = true, tvShows = false),
             HDFilmeProvider to ProviderSupport(movies = true, tvShows = true),
+            KinoGerProvider to ProviderSupport(movies = true, tvShows = true),
             MEGAKinoProvider to ProviderSupport(movies = true, tvShows = true),
             FilmyOnlineCcProvider to ProviderSupport(movies = true, tvShows = true),
             ZaluknijProvider to ProviderSupport(movies = true, tvShows = true),
