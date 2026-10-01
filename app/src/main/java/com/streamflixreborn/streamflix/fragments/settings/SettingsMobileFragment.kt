@@ -864,6 +864,7 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
             "HDFilme" -> "https://hdfilme.cafe/"
             "MEGAKino" -> "https://megakino12.com"
             "Einschalten" -> "https://einschalten.in"
+            "Kellerkino" -> "https://www.kellerkino.com/"
             else -> null
         }
 
@@ -1080,31 +1081,6 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
                             )
 
                         summary = text
-                    }
-                }
-            )
-
-            true
-        }
-
-        // KinoGer
-        findPreference<Preference>(
-            "provider_kinoger_domain_check"
-        )?.setOnPreferenceClickListener {
-
-            checkAndUpdate(
-                currentValue = {
-                    UserPreferences.kinogerDomain
-                },
-                saveValue = { newDomain ->
-                    UserPreferences.kinogerDomain = newDomain
-                },
-                afterSave = {
-                    findPreference<EditTextPreference>(
-                        "provider_kinoger_domain"
-                    )?.apply {
-                        text = UserPreferences.kinogerDomain
-                        summary = UserPreferences.kinogerDomain
                     }
                 }
             )

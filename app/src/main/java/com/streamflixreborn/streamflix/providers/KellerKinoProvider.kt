@@ -12,6 +12,7 @@ import com.streamflixreborn.streamflix.models.Movie
 import com.streamflixreborn.streamflix.models.People
 import com.streamflixreborn.streamflix.models.TvShow
 import com.streamflixreborn.streamflix.models.Video
+import com.streamflixreborn.streamflix.utils.UserPreferences
 import com.streamflixreborn.streamflix.utils.DnsResolver
 import com.streamflixreborn.streamflix.utils.NetworkClient
 import com.streamflixreborn.streamflix.utils.WebViewResolver
@@ -67,7 +68,11 @@ object KellerKinoProvider : Provider {
         "upstream",
     )
 
-    override val baseUrl: String = DEFAULT_BASE_URL
+    override val baseUrl: String
+        get() = UserPreferences.resolveProviderBaseUrl(
+            name,
+            DEFAULT_BASE_URL
+        )
 
     override val logo: String
         get() = "${baseUrl}favicon.ico"
