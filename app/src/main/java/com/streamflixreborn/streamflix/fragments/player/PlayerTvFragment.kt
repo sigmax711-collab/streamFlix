@@ -65,7 +65,10 @@ import com.streamflixreborn.streamflix.models.Season
 import com.streamflixreborn.streamflix.models.TvShow
 import com.streamflixreborn.streamflix.models.Video
 import com.streamflixreborn.streamflix.models.WatchItem
+import com.streamflixreborn.streamflix.providers.SerienStreamProvider
+import com.streamflixreborn.streamflix.sync.CloudSyncHooks
 import com.streamflixreborn.streamflix.ui.PlayerTvView
+import com.streamflixreborn.streamflix.utils.SubtitleOffsetRenderersFactory
 import com.streamflixreborn.streamflix.utils.DnsResolver
 import com.streamflixreborn.streamflix.utils.NetworkClient
 import com.streamflixreborn.streamflix.utils.EpisodeManager
@@ -290,7 +293,10 @@ class PlayerTvFragment : Fragment() {
                         binding.settings.setOnServerSelectedListener { server ->
                             viewModel.getVideo(state.servers.find { server.id == it.id }!!)
                         }
-                        viewModel.getVideo(state.servers.first())
+                        val preferredServer = state.servers.firstOrNull {
+                            it.name.equals(args.preferredServerName, ignoreCase = true)
+                        }
+                        viewModel.getVideo(preferredServer ?: state.servers.first())
 
                     }
                         is PlayerViewModel.State.FailedLoadingServers -> {
@@ -493,6 +499,7 @@ class PlayerTvFragment : Fragment() {
                                 "subtitle",
                                 "S${nextEpisode.season.number} E${nextEpisode.number}  •  ${nextEpisode.title}"
                             )
+                            putString("preferredServerName", currentServer?.name)
                         }
 
                         hideNextEpisodeOverlay()
@@ -881,10 +888,16 @@ class PlayerTvFragment : Fragment() {
                                         true
                                     }
 
-                                    database.tvShowDao().save(tvShow.copy().apply {
+                                    val updatedTvShow = tvShow.copy().apply {
                                         merge(tvShow)
                                         isWatching = isWatchingValue
-                                    })
+                                    }
+                                    database.tvShowDao().update(updatedTvShow)
+                                    CloudSyncHooks.tvShow(
+                                        requireContext(),
+                                        provider,
+                                        updatedTvShow,
+                                    )
                                 }
                             }
                         }
@@ -945,10 +958,38 @@ class PlayerTvFragment : Fragment() {
             updatePlayerHeader()
             val extraBuffering = PlayerSettingsView.Settings.ExtraBuffering.isEnabled
             val softwareDecoder = PlayerSettingsView.Settings.SoftwareDecoder.isEnabled
+
+            val vavooTlsHost =
+                if (
+                    UserPreferences.currentProvider
+                        ?.javaClass
+                        ?.simpleName == "VavooProvider"
+                ) {
+                    runCatching {
+                        java.net.URI(video.source).host
+                    }.getOrNull()
+                } else {
+                    null
+                }
+
+            android.util.Log.d(
+                "VavooTLS",
+                "TV displayVideo provider=" +
+                    UserPreferences.currentProvider?.javaClass?.simpleName +
+                    " host=$vavooTlsHost"
+            )
+
             val needsReinit =
-                extraBuffering != currentExtraBuffering || softwareDecoder != currentSoftwareDecoder
+                extraBuffering != currentExtraBuffering ||
+                    softwareDecoder != currentSoftwareDecoder ||
+                    vavooTlsHost != currentVavooTlsHost
+
             if (needsReinit) {
-                initializePlayer(extraBuffering, softwareDecoder)
+                initializePlayer(
+                    extraBuffering,
+                    softwareDecoder,
+                    vavooTlsHost
+                )
                 player.playlistMetadata = MediaMetadata.Builder()
                     .setTitle(resolvePlayerTitle())
                     .setMediaServers(servers.map {
@@ -1123,6 +1164,7 @@ class PlayerTvFragment : Fragment() {
                     binding.pvPlayer.keepScreenOn = isPlaying
 
                     if (isPlaying) {
+                        recordRecentlyWatchedStart()
                         startProgressHandler()
                     } else {
                         stopProgressHandler()
@@ -1188,11 +1230,17 @@ class PlayerTvFragment : Fragment() {
                                         val isStillWatching =
                                             episodeDao.hasAnyWatchHistoryForTvShow(tvShow.id)
 
-                                        database.tvShowDao().save(tvShow.copy().apply {
+                                        val updatedTvShow = tvShow.copy().apply {
                                             merge(tvShow)
                                             isWatching =
                                                 !player.hasReallyFinished() || isStillWatching
-                                        })
+                                        }
+                                        database.tvShowDao().update(updatedTvShow)
+                                        CloudSyncHooks.tvShow(
+                                            requireContext(),
+                                            provider,
+                                            updatedTvShow,
+                                        )
                                     }
                                 }
                             }
@@ -1258,6 +1306,65 @@ class PlayerTvFragment : Fragment() {
 
         private fun ExoPlayer.hasStarted(): Boolean {
             return (this.currentPosition > (this.duration * 0.005) || this.currentPosition > 20.seconds.inWholeMilliseconds)
+        }
+
+        private fun recordRecentlyWatchedStart() {
+            val playedAtMillis = System.currentTimeMillis()
+            when (val videoType = currentVideoTypeForUi()) {
+                is Video.Type.Movie -> {
+                    if (database.movieDao().markRecentlyWatched(videoType.id, playedAtMillis) == 0) {
+                        database.movieDao().insert(
+                            Movie(
+                                id = videoType.id,
+                                title = videoType.title,
+                                released = videoType.releaseDate,
+                                poster = videoType.poster,
+                                imdbId = videoType.imdbId,
+                            ).apply {
+                                lastPlayedAtMillis = playedAtMillis
+                            }
+                        )
+                    }
+                }
+
+                is Video.Type.Episode -> {
+                    val storedTvShow = database.tvShowDao().getById(videoType.tvShow.id)
+                        ?: TvShow(
+                            id = videoType.tvShow.id,
+                            title = videoType.tvShow.title,
+                            released = videoType.tvShow.releaseDate,
+                            poster = videoType.tvShow.poster,
+                            banner = videoType.tvShow.banner,
+                            imdbId = videoType.tvShow.imdbId,
+                        ).apply {
+                            lastPlayedAtMillis = playedAtMillis
+                            lastPlayedEpisodeId = videoType.id
+                            database.tvShowDao().insert(this)
+                        }
+
+                    if (database.episodeDao().getById(videoType.id) == null) {
+                        database.episodeDao().insert(
+                            Episode(
+                                id = videoType.id,
+                                number = videoType.number,
+                                title = videoType.title,
+                                poster = videoType.poster,
+                                overview = videoType.overview,
+                                tvShow = storedTvShow,
+                                season = Season(
+                                    number = videoType.season.number,
+                                    title = videoType.season.title.orEmpty(),
+                                ),
+                            )
+                        )
+                    }
+                    database.tvShowDao().markRecentlyWatched(
+                        id = videoType.tvShow.id,
+                        episodeId = videoType.id,
+                        playedAtMillis = playedAtMillis,
+                    )
+                }
+            }
         }
 
         private fun ExoPlayer.hasFinished(): Boolean {
@@ -1531,6 +1638,7 @@ class PlayerTvFragment : Fragment() {
 
         private var currentExtraBuffering = false
         private var currentSoftwareDecoder = false
+        private var currentVavooTlsHost: String? = null
 
         private fun buildPlayer(extraBuffering: Boolean): ExoPlayer {
             val loadControl = DefaultLoadControl.Builder()
@@ -1542,17 +1650,15 @@ class PlayerTvFragment : Fragment() {
                 )
                 .build()
 
-            val baseBuilder = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1 && !currentSoftwareDecoder) {
-                ExoPlayer.Builder(requireContext())
-            } else {
-                val renderersFactory = DefaultRenderersFactory(requireContext()).apply {
+            val renderersFactory = SubtitleOffsetRenderersFactory(requireContext()).apply {
+                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1 || currentSoftwareDecoder) {
                     setEnableDecoderFallback(true)
                     if (currentSoftwareDecoder) {
                         setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                     }
                 }
-                ExoPlayer.Builder(requireContext(), renderersFactory)
             }
+            val baseBuilder = ExoPlayer.Builder(requireContext(), renderersFactory)
 
             return baseBuilder
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
@@ -1560,14 +1666,36 @@ class PlayerTvFragment : Fragment() {
                 .build()
         }
 
-        private fun initializePlayer(extraBuffering: Boolean, softwareDecoder: Boolean = currentSoftwareDecoder) {
+        private fun initializePlayer(
+            extraBuffering: Boolean,
+            softwareDecoder: Boolean = currentSoftwareDecoder,
+            vavooTlsHost: String? = currentVavooTlsHost
+        ) {
             releasePlayer()
             currentExtraBuffering = extraBuffering
             currentSoftwareDecoder = softwareDecoder
+            currentVavooTlsHost = vavooTlsHost
 
             var tokenLogged = false
-            val okHttpClient = OkHttpClient.Builder()
-                .dns(DnsResolver.doh)
+
+            val okHttpBuilder =
+                OkHttpClient.Builder()
+                    .dns(DnsResolver.doh)
+
+            if (!vavooTlsHost.isNullOrBlank()) {
+                com.streamflixreborn.streamflix.utils.VavooTls
+                    .relaxForHost(
+                        okHttpBuilder,
+                        vavooTlsHost
+                    )
+
+                android.util.Log.d(
+                    "VavooTLS",
+                    "TV TLS exception ACTIVE for host: $vavooTlsHost"
+                )
+            }
+
+            val okHttpClient = okHttpBuilder
                 .addInterceptor { chain ->
                     var request = chain.request()
                     

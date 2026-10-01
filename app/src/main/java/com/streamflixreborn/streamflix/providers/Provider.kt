@@ -61,6 +61,7 @@ interface Provider {
 
         val providers = mapOf(
             SflixProvider to ProviderSupport(movies = true, tvShows = true),
+            FanpelisProvider to ProviderSupport(movies = true, tvShows = true),
             SerienStreamProvider to ProviderSupport(movies = false, tvShows = true),
             StreamingCommunityProvider("it") to ProviderSupport(movies = true, tvShows = true),
             StreamingCommunityProvider("en") to ProviderSupport(movies = true, tvShows = true),
@@ -79,10 +80,13 @@ interface Provider {
             DoramasflixProvider to ProviderSupport(movies = true, tvShows = true),
             CineCalidadProvider to ProviderSupport(movies = true, tvShows = true),
             SeriesFlixProvider to ProviderSupport(movies = false, tvShows = true),
+            SeriesTurcasProvider to ProviderSupport(movies = false, tvShows = true),
             FlixLatamProvider to ProviderSupport(movies = true, tvShows = true),
             LaCartoonsProvider to ProviderSupport(movies = false, tvShows = true),
             AnimefenixProvider to ProviderSupport(movies = false, tvShows = true),
             AnimeFlvProvider to ProviderSupport(movies = false, tvShows = true),
+            JKAnimeProvider to ProviderSupport(movies = true, tvShows = true),
+            TioAnimeProvider to ProviderSupport(movies = true, tvShows = true),
             AnimeAv1Provider to ProviderSupport(movies = false, tvShows = true),
             AnimeOnlineNinjaProvider to ProviderSupport(movies = true, tvShows = true),
             SoloLatinoProvider to ProviderSupport(movies = true, tvShows = true),
@@ -98,10 +102,11 @@ interface Provider {
             FrenchStreamProvider to ProviderSupport(movies = true, tvShows = true),
             GuardaSerieProvider to ProviderSupport(movies = true, tvShows = true),
             EinschaltenProvider to ProviderSupport(movies = true, tvShows = false),
+            KellerKinoProvider to ProviderSupport(movies = true, tvShows = false),
             HDFilmeProvider to ProviderSupport(movies = true, tvShows = true),
             MEGAKinoProvider to ProviderSupport(movies = true, tvShows = true),
             FilmyOnlineCcProvider to ProviderSupport(movies = true, tvShows = true),
-            ZeriunProvider to ProviderSupport(movies = true, tvShows = true),
+            ZaluknijProvider to ProviderSupport(movies = true, tvShows = true),
             TvporinternetHDProvider to ProviderSupport(movies = false, tvShows = true),
             FrembedProvider to ProviderSupport(movies = true, tvShows = true),
             KidrazProvider to ProviderSupport(movies = true, tvShows = false),
@@ -118,11 +123,13 @@ interface Provider {
             PlutoTvItProvider to ProviderSupport(movies = false, tvShows = true),
             PlutoTvUsProvider to ProviderSupport(movies = false, tvShows = true),
             CineCityProvider to ProviderSupport(movies = false, tvShows = true),
+            CineHaxProvider to ProviderSupport(movies = true, tvShows = true),
             VavooProvider("de") to ProviderSupport(movies = false, tvShows = true),
             VavooProvider("it") to ProviderSupport(movies = false, tvShows = true),
             VavooProvider("fr") to ProviderSupport(movies = false, tvShows = true),
             VavooProvider("es") to ProviderSupport(movies = false, tvShows = true),
-            VavooProvider("pl") to ProviderSupport(movies = false, tvShows = true)
+            VavooProvider("pl") to ProviderSupport(movies = false, tvShows = true),
+            VavooProvider("en") to ProviderSupport(movies = false, tvShows = true)
         )
 
         // Helper functions to check support
