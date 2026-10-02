@@ -70,6 +70,7 @@ interface Provider {
             AniWorldProvider to ProviderSupport(movies = false, tvShows = true),
             RidomoviesProvider to ProviderSupport(movies = true, tvShows = true),
             AnikotoProvider to ProviderSupport(movies = true, tvShows = true),
+            NetPrimeProvider to ProviderSupport(movies = true, tvShows = true),
             WiflixProvider to ProviderSupport(movies = true, tvShows = true),
             MStreamProvider to ProviderSupport(movies = true, tvShows = true),
             FrenchAnimeProvider to ProviderSupport(movies = true, tvShows = true),
