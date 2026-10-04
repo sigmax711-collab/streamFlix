@@ -42,4 +42,30 @@ object VavooTls {
                     defaultVerifier.verify(requestedHost, session)
             }
     }
+
+    fun relaxForHost(
+        builder: OkHttpClient.Builder,
+        allowedHost: String
+    ): OkHttpClient.Builder {
+
+        val normalHostnameVerifier =
+            HttpsURLConnection.getDefaultHostnameVerifier()
+
+        return builder
+            .sslSocketFactory(
+                sslSocketFactory,
+                trustManager
+            )
+            .hostnameVerifier { hostname, session ->
+                hostname.equals(
+                    allowedHost,
+                    ignoreCase = true
+                ) &&
+                    normalHostnameVerifier.verify(
+                        hostname,
+                        session
+                    )
+            }
+    }
+
 }

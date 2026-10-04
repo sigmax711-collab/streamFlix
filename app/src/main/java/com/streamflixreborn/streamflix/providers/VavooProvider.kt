@@ -73,8 +73,7 @@ class VavooProvider(override val language: String) : IptvProvider {
             .build()
     }
 
-    override val baseUrl: String
-        get() = VavooConfig.baseUrl().trimEnd('/')
+    override val baseUrl: String = "https://vavoo.to"
 
     // VAVOO_VYPN_FINAL_DYNAMIC_LIVE_V21
     // LIVE TV follows the user-selected Vavoo site. VOD remains in VavooVodProvider.
@@ -417,8 +416,7 @@ class VavooProvider(override val language: String) : IptvProvider {
             title = channel.name,
             poster = POSTER,
             banner = POSTER,
-            overview = VavooEpgCache.summary(language, channel.name)
-                ?: "Keine Programminformationen"
+            overview = "Vavoo Live TV"
         )
     }
 
@@ -561,16 +559,9 @@ class VavooProvider(override val language: String) : IptvProvider {
 
 
     override suspend fun getHome(): List<Category> {
-        // Do not block the channel catalog on a multi-megabyte EPG download.
-        VavooEpgCache.preload(language)
-
         val channels = allHomeChannels()
-        val categoryItems = CATEGORY_LABELS.map { (id, label) ->
-            Genre(id = "$CATEGORY_PREFIX$id", name = label)
-        }
 
         return listOf(
-            Category(name = "Kategorie", list = categoryItems),
             Category(
                 name = if (language == "en") "Vavoo United Kingdom Live TV" else name,
                 list = channels.take(300).map(::asTvShow)
@@ -579,10 +570,6 @@ class VavooProvider(override val language: String) : IptvProvider {
     }
 
     override suspend fun search(query: String, page: Int): List<AppAdapter.Item> {
-        VavooEpgCache.preload(language)
-        if (page == 1 && query.isNotBlank()) {
-            VavooEpgCache.awaitReady(language, timeoutMs = 2500L)
-        }
         val cleanQuery = query.trim()
         val cursor = if (page > 1) (page - 1) * 300 else null
 
@@ -590,17 +577,7 @@ class VavooProvider(override val language: String) : IptvProvider {
         val byChannelName = primaryGroups
             .flatMap { group -> fetchChannels(cleanQuery, group, cursor).first }
 
-        // EPG search never triggers another catalog download. It only supplements
-        // results from the home cache once the background EPG preload is ready.
-        val byProgramme = if (cleanQuery.isBlank() || page > 1) {
-            emptyList()
-        } else {
-            cachedHomeChannels().filter { channel ->
-                VavooEpgCache.matches(language, channel.name, cleanQuery)
-            }
-        }
-
-        return (byChannelName + byProgramme)
+        return byChannelName
             .distinctBy { it.id }
             .map(::asTvShow)
     }
@@ -608,10 +585,6 @@ class VavooProvider(override val language: String) : IptvProvider {
     override suspend fun getMovies(page: Int): List<Movie> = emptyList()
 
     override suspend fun getTvShows(page: Int): List<TvShow> {
-        VavooEpgCache.preload(language)
-        if (page == 1) {
-            VavooEpgCache.awaitReady(language, timeoutMs = 3500L)
-        }
         val cached = if (page == 1) cachedHomeChannels() else emptyList()
         val channels = if (cached.isNotEmpty()) {
             cached
@@ -657,8 +630,7 @@ class VavooProvider(override val language: String) : IptvProvider {
             title = title,
             poster = POSTER,
             banner = POSTER,
-            overview = VavooEpgCache.summary(language, title)
-                ?: "Keine Programminformationen",
+            overview = "Vavoo Live TV",
             seasons = listOf(Season(id = id, number = 1, title = "Watch"))
         )
     }
@@ -669,9 +641,6 @@ class VavooProvider(override val language: String) : IptvProvider {
 
     override suspend fun getGenre(id: String, page: Int): Genre {
         if (id.startsWith(CATEGORY_PREFIX)) {
-            if (page == 1) {
-                VavooEpgCache.awaitReady(language, timeoutMs = 2500L)
-            }
             val category = id.removePrefix(CATEGORY_PREFIX)
             val label = CATEGORY_LABELS[category] ?: category
             val channels = filterCategory(allHomeChannels(), category)
