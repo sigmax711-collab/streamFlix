@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 
 object SupabaseSettingsController {
     private const val SETUP_INSTRUCTIONS_URL =
-        "https://github.com/streamflix-reborn2/streamflix/blob/main/supabase_installation.md"
+        "https://git.gay/streamflix-reborn2/streamflix/src/branch/main/supabase_installation.md"
 
     fun bind(
         fragment: Fragment,
