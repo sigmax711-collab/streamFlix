@@ -1,9 +1,12 @@
 package com.streamflixreborn.streamflix.providers
 
+import android.util.Log
 import com.tanasi.retrofit_jsoup.converter.JsoupConverterFactory
 import com.streamflixreborn.streamflix.BuildConfig
 import com.streamflixreborn.streamflix.adapters.AppAdapter
 import com.streamflixreborn.streamflix.extractors.Extractor
+import com.streamflixreborn.streamflix.extractors.VidsrcRuExtractor
+import com.streamflixreborn.streamflix.extractors.VideasyExtractor
 import com.streamflixreborn.streamflix.models.Category
 import com.streamflixreborn.streamflix.models.Episode
 import com.streamflixreborn.streamflix.models.Genre
@@ -13,6 +16,7 @@ import com.streamflixreborn.streamflix.models.Season
 import com.streamflixreborn.streamflix.models.TvShow
 import com.streamflixreborn.streamflix.models.Video
 import com.streamflixreborn.streamflix.utils.DnsResolver
+import com.streamflixreborn.streamflix.utils.UserPreferences
 import okhttp3.OkHttpClient
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -27,13 +31,19 @@ import java.util.concurrent.TimeUnit
 
 object SflixProvider : Provider {
 
-    private const val URL = "https://sflix.to/"
-    override val baseUrl = URL
+    private const val DEFAULT_BASE_URL = "https://sflix.win/"
+
+    override val baseUrl: String
+        get() = UserPreferences.resolveProviderBaseUrl(
+            name,
+            DEFAULT_BASE_URL
+        )
     override val name = "SFlix"
     override val logo = "https://img.sflix.to/xxrz/400x400/100/66/35/66356c25ce98cb12993249e21742b129/66356c25ce98cb12993249e21742b129.png"
     override val language = "en"
 
-    private val service = SflixService.build()
+    private val service: SflixService
+        get() = SflixService.build(baseUrl)
 
 
     override suspend fun getHome(): List<Category> {
@@ -114,7 +124,7 @@ object SflixProvider : Provider {
                         quality = info.quality,
                         rating = info.rating,
                         poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
+                            ?.imageUrl(),
                     )
                 },
             )
@@ -134,7 +144,7 @@ object SflixProvider : Provider {
                         quality = info.quality,
                         rating = info.rating,
                         poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
+                            ?.imageUrl(),
 
                         seasons = info.lastEpisode?.let { lastEpisode ->
                             listOf(
@@ -304,7 +314,7 @@ object SflixProvider : Provider {
                 quality = info.quality,
                 rating = info.rating,
                 poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                    ?.attr("data-src"),
+                    ?.imageUrl(),
             )
         }
 
@@ -325,7 +335,7 @@ object SflixProvider : Provider {
                 quality = info.quality,
                 rating = info.rating,
                 poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                    ?.attr("data-src"),
+                    ?.imageUrl(),
 
                 seasons = info.lastEpisode?.let { lastEpisode ->
                     listOf(
@@ -350,7 +360,7 @@ object SflixProvider : Provider {
 
 
     override suspend fun getMovie(id: String): Movie {
-        val document = service.getMovie(id)
+        val document = service.getPage(resolveSflixUrl(id))
 
         val movie = Movie(
             id = id,
@@ -372,7 +382,7 @@ object SflixProvider : Provider {
             rating = document.selectFirst(".fs-item > .imdb")
                 ?.text()?.trim()?.removePrefix("IMDB:")?.toDoubleOrNull(),
             poster = document.selectFirst("div.detail_page-watch img.film-poster-img")
-                ?.attr("src"),
+                ?.imageUrl(),
             banner = document.selectFirst("div.detail-container > div.cover_follow")
                 ?.attr("style")?.substringAfter("background-image: url(")?.substringBefore(");"),
 
@@ -405,7 +415,7 @@ object SflixProvider : Provider {
                         quality = info.quality,
                         rating = info.rating,
                         poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
+                            ?.imageUrl(),
                     )
                 } else {
                     TvShow(
@@ -416,7 +426,7 @@ object SflixProvider : Provider {
                         quality = info.quality,
                         rating = info.rating,
                         poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
+                            ?.imageUrl(),
 
                         seasons = info.lastEpisode?.let { lastEpisode ->
                             listOf(
@@ -443,7 +453,7 @@ object SflixProvider : Provider {
 
 
     override suspend fun getTvShow(id: String): TvShow {
-        val document = service.getTvShow(id)
+        val document = service.getPage(resolveSflixUrl(id))
 
         val tvShow = TvShow(
             id = id,
@@ -465,19 +475,32 @@ object SflixProvider : Provider {
             rating = document.selectFirst(".fs-item > .imdb")
                 ?.text()?.trim()?.removePrefix("IMDB:")?.toDoubleOrNull(),
             poster = document.selectFirst("div.detail_page-watch img.film-poster-img")
-                ?.attr("src"),
+                ?.imageUrl(),
             banner = document.selectFirst("div.detail-container > div.cover_follow")
                 ?.attr("style")?.substringAfter("background-image: url(")?.substringBefore(");"),
 
-            seasons = service.getTvShowSeasons(id.toNumericalId())
-                .select("div.dropdown-menu.dropdown-menu-model > a")
-                .mapIndexed { seasonNumber, seasonElement ->
+            seasons = document
+                .select("#show-seasons .ss-item[data-ss][data-id], .ss-item[data-ss][data-id]")
+                .mapNotNull { seasonElement ->
+                    val seasonNumber =
+                        seasonElement.attr("data-ss").toIntOrNull()
+                            ?: return@mapNotNull null
+
+                    val seasonToken =
+                        seasonElement.attr("data-id").trim()
+
+                    if (seasonToken.isBlank()) {
+                        return@mapNotNull null
+                    }
+
                     Season(
-                        id = seasonElement.attr("data-id"),
-                        number = seasonNumber + 1,
-                        title = seasonElement.text(),
+                        id = seasonToken,
+                        number = seasonNumber,
+                        title = seasonElement.text().trim()
+                            .ifBlank { "Season $seasonNumber" },
                     )
-                },
+                }
+                .distinctBy { it.number },
             genres = document.select("div.elements > .row > div > .row-line")
                 .find { it.select(".type").text().contains("Genre") }
                 ?.select("a")?.map {
@@ -507,7 +530,7 @@ object SflixProvider : Provider {
                         quality = info.quality,
                         rating = info.rating,
                         poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
+                            ?.imageUrl(),
                     )
                 } else {
                     TvShow(
@@ -518,7 +541,7 @@ object SflixProvider : Provider {
                         quality = info.quality,
                         rating = info.rating,
                         poster = it.selectFirst("div.film-poster > img.film-poster-img")
-                            ?.attr("data-src"),
+                            ?.imageUrl(),
 
                         seasons = info.lastEpisode?.let { lastEpisode ->
                             listOf(
@@ -543,24 +566,66 @@ object SflixProvider : Provider {
         return tvShow
     }
 
-    override suspend fun getEpisodesBySeason(seasonId: String): List<Episode> {
+    override suspend fun getEpisodesBySeason(
+        seasonId: String,
+    ): List<Episode> {
         val document = service.getSeasonEpisodes(seasonId)
 
-        val episodes = document.select("div.flw-item.film_single-item.episode-item.eps-item")
-            .mapIndexed { episodeNumber, episodeElement ->
+        return document
+            .select("div.flw-item")
+            .mapNotNull { episodeElement ->
+
+                val anchor =
+                    episodeElement.selectFirst("a.eps-item[href]")
+                        ?: return@mapNotNull null
+
+                val episodeUrl =
+                    anchor.attr("href")
+                        .trim()
+                        .toAbsoluteUrl()
+
+                if (episodeUrl.isBlank()) {
+                    return@mapNotNull null
+                }
+
+                val episodeNumber =
+                    episodeElement
+                        .selectFirst(".episode-number")
+                        ?.text()
+                        ?.let {
+                            Regex("""\d+""")
+                                .find(it)
+                                ?.value
+                                ?.toIntOrNull()
+                        }
+                        ?: Regex("""/(\d+)-(\d+)/?$""")
+                            .find(episodeUrl)
+                            ?.groupValues
+                            ?.getOrNull(2)
+                            ?.toIntOrNull()
+                        ?: return@mapNotNull null
+
+                val title =
+                    episodeElement
+                        .selectFirst("h3.film-name")
+                        ?.text()
+                        ?.trim()
+                        ?.ifBlank { null }
+                        ?: "Episode $episodeNumber"
+
+                val posterElement =
+                    episodeElement.selectFirst("img")
+
+                val poster = posterElement?.imageUrl()
+
                 Episode(
-                    id = episodeElement.attr("data-id"),
-                    number = episodeElement.selectFirst("div.episode-number")
-                        ?.text()?.substringAfter("Episode ")?.substringBefore(":")?.toIntOrNull()
-                        ?: episodeNumber,
-                    title = episodeElement.selectFirst("h3.film-name")
-                        ?.text(),
-                    poster = episodeElement.selectFirst("img")
-                        ?.attr("src"),
+                    id = episodeUrl,
+                    number = episodeNumber,
+                    title = title,
+                    poster = poster,
                 )
             }
-
-        return episodes
+            .distinctBy { it.id }
     }
 
 
@@ -579,7 +644,7 @@ object SflixProvider : Provider {
                     ?.text() ?: ""
                 val showInfo = it.select("div.film-detail > div.fd-infor > span").toInfo()
                 val showPoster = it.selectFirst("div.film-poster > img.film-poster-img")
-                    ?.attr("data-src")
+                    ?.imageUrl()
 
                 if (it.isMovie()) {
                     Movie(
@@ -637,7 +702,7 @@ object SflixProvider : Provider {
                     ?.text() ?: ""
                 val showInfo = it.select("div.film-detail > div.fd-infor > span").toInfo()
                 val showPoster = it.selectFirst("div.film-poster > img.film-poster-img")
-                    ?.attr("data-src")
+                    ?.imageUrl()
 
                 if (it.isMovie()) {
                     Movie(
@@ -679,29 +744,311 @@ object SflixProvider : Provider {
         return people
     }
 
-    override suspend fun getServers(id: String, videoType: Video.Type): List<Video.Server> {
-        val servers = when (videoType) {
-            is Video.Type.Movie -> service.getMovieServers(id.toNumericalId())
-            is Video.Type.Episode -> service.getEpisodeServers(id)
-        }.select("a")
-            .map {
+    private fun Document.getPlayerListUrl(): String? {
+        val match = Regex(
+            """(?:const|let|var)\s+pl_url\s*=\s*['"]([^'"]+)['"]""",
+            RegexOption.IGNORE_CASE,
+        ).find(html())
+
+        return match
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.toAbsoluteUrl()
+    }
+
+    private suspend fun getCurrentServers(
+        pageUrl: String,
+    ): List<Video.Server> {
+        val page =
+            service.getPage(pageUrl.toAbsoluteUrl())
+
+        val playerListUrl =
+            page.getPlayerListUrl()
+                ?: throw Exception("SFlix player URL not found")
+
+        val serverDocument =
+            service.getPage(playerListUrl)
+
+        return serverDocument
+            .select("li.sv-item[data-id], .sv-item[data-id]")
+            .mapNotNull { element ->
+
+                val source =
+                    element.attr("data-id").trim()
+
+                if (source.isBlank()) {
+                    return@mapNotNull null
+                }
+
+                val name =
+                    element.attr("data-srv")
+                        .trim()
+                        .ifBlank {
+                            element
+                                .selectFirst("span")
+                                ?.text()
+                                ?.trim()
+                                .orEmpty()
+                        }
+                        .ifBlank { "SFlix" }
+
                 Video.Server(
-                    id = it.attr("data-id"),
-                    name = it.selectFirst("span")?.text()?.trim() ?: "",
+                    id = source,
+                    name = name,
+                )
+            }
+            .distinctBy { it.id }
+    }
+
+    override suspend fun getServers(
+        id: String,
+        videoType: Video.Type,
+    ): List<Video.Server> {
+        val rawServers = getCurrentServers(id)
+
+        if (rawServers.isEmpty()) {
+            throw Exception("No links found")
+        }
+
+        /*
+         * sflix.win currently exposes:
+         *
+         * UpCloud / Vidmoly -> 0123movie.space wrappers
+         * Vidsrc            -> vidsrc.cc
+         * Videasy           -> player.videasy.net
+         *
+         * The raw wrapper URLs must not be passed directly to the generic
+         * extractor matcher. Use the native Streamflix extractors instead.
+         */
+
+        val ids = extractSflixIds(rawServers)
+        val tmdbId = ids.tmdbId
+
+        val normalizedVideoType =
+            videoType.withSflixIds(ids)
+
+        val servers = mutableListOf<Video.Server>()
+
+        // -------------------------------------------------
+        // Vidsrc
+        // -------------------------------------------------
+
+        rawServers
+            .firstOrNull {
+                it.name.equals("Vidsrc", ignoreCase = true)
+            }
+            ?.let { raw ->
+                val server =
+                    if (tmdbId != null) {
+                        VidsrcRuExtractor()
+                            .server(normalizedVideoType)
+                    } else {
+                        Video.Server(
+                            id = "Vidsrc.to",
+                            name = "Vidsrc",
+                            src = rewriteSflixVidsrc(raw.id),
+                        )
+                    }
+
+                servers += server.copy(
+                    name = "Vidsrc"
                 )
             }
 
-        if (servers.isEmpty()) throw Exception("No links found")
+        // -------------------------------------------------
+        // Videasy
+        // -------------------------------------------------
 
-        return servers
+        if (
+            tmdbId != null &&
+            rawServers.any {
+                it.name.equals("Videasy", ignoreCase = true)
+            }
+        ) {
+            servers +=
+                VideasyExtractor()
+                    .servers(
+                        normalizedVideoType,
+                        "en"
+                    )
+                    .map { server ->
+                        server.copy(
+                            name = server.name
+                                .replace(" (Videasy)", "")
+                        )
+                    }
+        }
+
+        if (servers.isEmpty()) {
+            throw Exception(
+                "No supported SFlix playback links found"
+            )
+        }
+
+        return servers.distinctBy {
+            it.src.ifBlank { it.id }
+        }
     }
 
-    override suspend fun getVideo(server: Video.Server): Video {
-        val link = service.getLink(server.id)
 
-        return Extractor.extract(link.link, server)
+    override suspend fun getVideo(
+        server: Video.Server,
+    ): Video {
+        server.video?.let {
+            return it
+        }
+
+        val source =
+            server.src.ifBlank {
+                server.id
+            }
+
+        return Extractor.extract(
+            source,
+            server
+        )
     }
 
+
+    private data class SflixIds(
+        val tmdbId: String?,
+        val imdbId: String?,
+    )
+
+
+    private fun extractSflixIds(
+        servers: List<Video.Server>,
+    ): SflixIds {
+        val sources =
+            servers.map {
+                it.src.ifBlank { it.id }
+            }
+
+        val imdbId =
+            sources
+                .asSequence()
+                .mapNotNull { source ->
+                    Regex(
+                        """tt\d{5,12}""",
+                        RegexOption.IGNORE_CASE,
+                    )
+                        .find(source)
+                        ?.value
+                }
+                .firstOrNull()
+
+        val tmdbFromVideasy =
+            sources
+                .asSequence()
+                .filter {
+                    it.contains(
+                        "videasy",
+                        ignoreCase = true
+                    )
+                }
+                .mapNotNull { source ->
+                    Regex(
+                        """/(?:movie|tv)/(\d+)""",
+                        RegexOption.IGNORE_CASE,
+                    )
+                        .find(source)
+                        ?.groupValues
+                        ?.getOrNull(1)
+                }
+                .firstOrNull()
+
+        /*
+         * Current 0123movie wrappers contain both IDs, e.g.
+         *
+         * /mv/tt35538033/1423191/
+         * /vmf/tt35538033/1423191/
+         */
+        val tmdbFromWrapper =
+            sources
+                .asSequence()
+                .mapNotNull { source ->
+                    Regex(
+                        """/tt\d{5,12}/(\d+)(?:/|$)""",
+                        RegexOption.IGNORE_CASE,
+                    )
+                        .find(source)
+                        ?.groupValues
+                        ?.getOrNull(1)
+                }
+                .firstOrNull()
+
+        return SflixIds(
+            tmdbId =
+                tmdbFromVideasy
+                    ?: tmdbFromWrapper,
+            imdbId = imdbId,
+        )
+    }
+
+
+    private fun Video.Type.withSflixIds(
+        ids: SflixIds,
+    ): Video.Type {
+        return when (this) {
+            is Video.Type.Movie ->
+                copy(
+                    id = ids.tmdbId ?: id,
+                    imdbId = ids.imdbId ?: imdbId,
+                )
+
+            is Video.Type.Episode ->
+                copy(
+                    tvShow = tvShow.copy(
+                        id = ids.tmdbId ?: tvShow.id,
+                        imdbId = ids.imdbId ?: tvShow.imdbId,
+                    )
+                )
+        }
+    }
+
+
+    private fun rewriteSflixVidsrc(
+        source: String,
+    ): String {
+        val value = source.trim()
+
+        val suffix =
+            value.substringAfter(
+                "vidsrc.cc",
+                ""
+            )
+
+        if (suffix.isBlank()) {
+            return value
+        }
+
+        return "https://vidsrc.to" +
+            suffix.removePrefix("/v2")
+    }
+
+
+    private fun resolveSflixUrl(value: String): String {
+        val url = value.trim()
+
+        return when {
+            url.startsWith("https://", ignoreCase = true) ||
+                url.startsWith("http://", ignoreCase = true) -> url
+
+            else ->
+                baseUrl.trimEnd('/') + "/" + url.trimStart('/')
+        }
+    }
+
+    private fun Element.imageUrl(): String? {
+        return attr("src")
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?: attr("data-src")
+                .trim()
+                .takeIf { it.isNotBlank() }
+    }
 
     private fun Element.isMovie(): Boolean = this.selectFirst("a")?.attr("href")
         ?.contains("/movie/") ?: false
@@ -725,21 +1072,83 @@ object SflixProvider : Provider {
         }
     }
 
+    private fun String.toAbsoluteUrl(): String {
+        val value = trim()
+
+        if (
+            value.startsWith("http://", ignoreCase = true) ||
+            value.startsWith("https://", ignoreCase = true)
+        ) {
+            return value
+        }
+
+        return "${baseUrl.trimEnd('/')}/${value.trimStart('/')}"
+    }
+
     private fun String.toNumericalId(): String = this.substringAfterLast("-")
 
 
     private interface SflixService {
 
         companion object {
-            fun build(): SflixService {
+            fun build(baseUrl: String): SflixService {
                 val client = OkHttpClient.Builder()
                     .readTimeout(30, TimeUnit.SECONDS)
                     .connectTimeout(30, TimeUnit.SECONDS)
+                    .addInterceptor { chain ->
+                        val original = chain.request()
+
+                        val request = original.newBuilder()
+                            .header(
+                                "User-Agent",
+                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                                    "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+                            )
+                            .header(
+                                "Accept",
+                                "text/html,application/xhtml+xml,application/xml;q=0.9," +
+                                    "image/avif,image/webp,*/*;q=0.8"
+                            )
+                            .header("Accept-Language", "en-US,en;q=0.9")
+                            .build()
+
+                        Log.d(
+                            "SFlixHttp",
+                            "--> ${request.method} ${request.url}"
+                        )
+
+                        val response = chain.proceed(request)
+
+                        Log.d(
+                            "SFlixHttp",
+                            "<-- ${response.code} ${response.request.url} " +
+                                "server=${response.header("server")} " +
+                                "cf-ray=${response.header("cf-ray")} " +
+                                "location=${response.header("location")}"
+                        )
+
+                        if (!response.isSuccessful) {
+                            val preview = try {
+                                response.peekBody(2048L).string()
+                                    .replace("\n", " ")
+                                    .replace("\r", " ")
+                            } catch (_: Exception) {
+                                "<unable to read body>"
+                            }
+
+                            Log.d(
+                                "SFlixHttp",
+                                "ERROR BODY: $preview"
+                            )
+                        }
+
+                        response
+                    }
                     .dns(DnsResolver.doh)
                     .build()
 
                 val retrofit = Retrofit.Builder()
-                    .baseUrl(URL)
+                    .baseUrl(baseUrl.trimEnd('/') + "/")
                     .addConverterFactory(JsoupConverterFactory.create())
                     .addConverterFactory(GsonConverterFactory.create())
                     .client(client)
@@ -752,13 +1161,18 @@ object SflixProvider : Provider {
         @GET("home")
         suspend fun getHome(): Document
 
+        @GET
+        suspend fun getPage(
+            @Url url: String,
+        ): Document
+
         @GET("search/{query}")
         suspend fun search(@Path("query") query: String, @Query("page") page: Int): Document
 
         @GET("movie")
         suspend fun getMovies(@Query("page") page: Int): Document
 
-        @GET("tv-show")
+        @GET("tv-series/")
         suspend fun getTvShows(@Query("page") page: Int): Document
 
 
@@ -775,8 +1189,10 @@ object SflixProvider : Provider {
         @GET("ajax/season/list/{id}")
         suspend fun getTvShowSeasons(@Path("id") tvShowId: String): Document
 
-        @GET("ajax/season/episodes/{id}")
-        suspend fun getSeasonEpisodes(@Path("id") seasonId: String): Document
+        @GET("ajax/ajax.php")
+        suspend fun getSeasonEpisodes(
+            @Query("episode") seasonToken: String,
+        ): Document
 
         @GET("ajax/episode/servers/{id}")
         suspend fun getEpisodeServers(@Path("id") episodeId: String): Document

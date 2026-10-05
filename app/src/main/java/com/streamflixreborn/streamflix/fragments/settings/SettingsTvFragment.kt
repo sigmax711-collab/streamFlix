@@ -1482,6 +1482,7 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             "AniWorld" -> "https://aniworld.to/"
             "Filmpalast" -> "https://filmpalast.to/"
             "HDFilme" -> "https://hdfilme.cafe/"
+            "SFlix" -> "https://sflix.win/"
             "MEGAKino" -> "https://megakino12.com"
             "Einschalten" -> "https://einschalten.in"
             "Kellerkino" -> "https://www.kellerkino.com/"
