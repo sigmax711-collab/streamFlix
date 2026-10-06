@@ -942,9 +942,23 @@ class TmdbProvider(override val language: String) : Provider {
                 tvShows = true,
             ),
             GermanTmdbProvider(
+                "kellerkino",
+                "KellerKino",
+                KellerKinoProvider,
+                movies = true,
+                tvShows = false,
+            ),
+            GermanTmdbProvider(
                 "serienstream",
                 "SerienStream",
                 SerienStreamProvider,
+                movies = false,
+                tvShows = true,
+            ),
+            GermanTmdbProvider(
+                "aniworld",
+                "AniWorld",
+                AniWorldProvider,
                 movies = false,
                 tvShows = true,
             ),
@@ -1070,7 +1084,9 @@ class TmdbProvider(override val language: String) : Provider {
             "hdfilme" -> HDFilmeProvider
             "megakino" -> MEGAKinoProvider
             "filmpalast" -> FilmPalastProvider
+            "kellerkino" -> KellerKinoProvider
             "serienstream" -> SerienStreamProvider
+            "aniworld" -> AniWorldProvider
             else -> null
         }
 
