@@ -27,6 +27,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Interceptor
 import okhttp3.Response
 import okhttp3.ResponseBody
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.TimeUnit
 import java.net.URLDecoder
@@ -34,6 +38,9 @@ import java.nio.charset.StandardCharsets
 import retrofit2.http.GET
 import retrofit2.http.Headers
 import retrofit2.http.Url
+import retrofit2.http.Body
+import retrofit2.http.Header
+import retrofit2.http.POST
 import retrofit2.http.Path
 import com.streamflixreborn.streamflix.utils.UserPreferences
 
@@ -122,6 +129,17 @@ object HDFilmeProvider : Provider {
         @GET
         suspend fun getRawPage(@Url url: String): ResponseBody
 
+        @Headers(
+            USER_AGENT,
+            "Content-Type: application/json"
+        )
+        @POST
+        suspend fun postJson(
+            @Url url: String,
+            @Body body: RequestBody,
+            @Header("Referer") referer: String,
+        ): ResponseBody
+
         @Headers(USER_AGENT)
         @GET("{path}page/{page}/")
         suspend fun getPaged(
@@ -167,41 +185,154 @@ object HDFilmeProvider : Provider {
     @Volatile private var sitemapEntries: List<SitemapEntry>? = null
     private val sitemapMutex = Mutex()
 
+    private fun parseHdCard(
+        element: Element,
+        tvShow: Boolean,
+    ): AppAdapter.Item? {
+
+        val href =
+            element.attr("href")
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?: return null
+
+        val id = normalizeUrl(href)
+
+        val title =
+            element.attr("title")
+                .trim()
+                .ifBlank {
+                    element.selectFirst(
+                        ".hd-c-title, .hd-cw-title"
+                    )
+                        ?.text()
+                        ?.trim()
+                        .orEmpty()
+                }
+
+        if (title.isBlank()) {
+            return null
+        }
+
+        val image = element.selectFirst(".hd-c-img img, img")
+
+        val imageUrl =
+            image
+                ?.attr("data-src")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: image
+                    ?.attr("src")
+                    ?.trim()
+                    .orEmpty()
+
+        val poster =
+            imageUrl
+                .takeIf { it.isNotBlank() }
+                ?.let { normalizeUrl(it) }
+
+        val meta =
+            element.selectFirst(
+                ".hd-c-meta, .hd-cw-meta"
+            )
+                ?.text()
+                .orEmpty()
+
+        val year =
+            Regex("""\b(?:19|20)\d{2}\b""")
+                .find(meta)
+                ?.value
+
+        return if (tvShow) {
+            TvShow(
+                id = id,
+                title = title,
+                released = year,
+                poster = poster,
+            )
+        } else {
+            Movie(
+                id = id,
+                title = title,
+                released = year,
+                poster = poster,
+            )
+        }
+    }
+
+
     override suspend fun getHome(): List<Category> {
-        val doc = service.getHome()
-        val categories = mutableListOf<Category>()
+        val document = service.getHome()
 
-        val sliderItems = coroutineScope {
-            doc.select("ul.glide__slides li.glide__slide").map { el ->
-                async { parseSliderItem(el) }
-            }.awaitAll().filterNotNull()
+        val categories =
+            document.select(".hd-row")
+                .mapNotNull { row ->
+
+                    val name =
+                        row.selectFirst(".hd-row-title")
+                            ?.text()
+                            ?.trim()
+                            .orEmpty()
+
+                    if (name.isBlank()) {
+                        return@mapNotNull null
+                    }
+
+                    val isTvRow =
+                        name.contains(
+                            "serie",
+                            ignoreCase = true,
+                        )
+
+                    val items =
+                        row.select("a.hd-c[href]")
+                            .mapNotNull {
+                                parseHdCard(
+                                    it,
+                                    tvShow = isTvRow,
+                                )
+                            }
+                            .distinctBy { item ->
+                                when (item) {
+                                    is Movie -> item.id
+                                    is TvShow -> item.id
+                                    else -> item.hashCode().toString()
+                                }
+                            }
+
+                    if (items.isEmpty()) {
+                        null
+                    } else {
+                        Category(
+                            name = name,
+                            list = items,
+                        )
+                    }
+                }
+
+        if (categories.isNotEmpty()) {
+            return categories
         }
 
-        if (sliderItems.isNotEmpty()) {
-            categories.add(Category(name = Category.FEATURED, list = sliderItems))
+        val fallback = mutableListOf<Category>()
+
+        val movies = getMovies(1)
+        if (movies.isNotEmpty()) {
+            fallback += Category(
+                name = "Filme",
+                list = movies,
+            )
         }
 
-        val listingDiv = doc.selectFirst("div.listing.grid[id=dle-content]")
-        if (listingDiv != null) {
-            val items = listingDiv.select("div.item.relative.mt-3").mapNotNull { parseGridItem(it) }
-            if (items.isNotEmpty()) {
-                categories.add(Category(name = "Filme", list = items))
-            }
+        val tvShows = getTvShows(1)
+        if (tvShows.isNotEmpty()) {
+            fallback += Category(
+                name = "Serien",
+                list = tvShows,
+            )
         }
 
-        val latestMoviesSection = doc.selectFirst("section.sidebar-section:has(h3:containsOwn(neueste Filme eingefügt))")
-        val latestMoviesItems = latestMoviesSection?.select("div.listing > a")?.mapNotNull { parseSidebarItemAsMovie(it) } ?: emptyList()
-        if (latestMoviesItems.isNotEmpty()) {
-            categories.add(Category(name = "Neueste Filme Eingefügt", list = latestMoviesItems))
-        }
-
-        val latestSeriesSection = doc.selectFirst("section.sidebar-section:has(h3:containsOwn(neueste Serie eingefügt))")
-        val latestSeriesItems = latestSeriesSection?.select("div.listing > a")?.mapNotNull { parseSidebarItemAsTvShow(it) } ?: emptyList()
-        if (latestSeriesItems.isNotEmpty()) {
-            categories.add(Category(name = "Neueste Serie Eingefügt", list = latestSeriesItems))
-        }
-
-        return categories
+        return fallback
     }
 
     private suspend fun parseSliderItem(el: Element): Movie? {
@@ -224,42 +355,88 @@ object HDFilmeProvider : Provider {
     }
 
     private fun parseGridItem(el: Element): Movie? {
-        val titleElement = el.selectFirst("h3.line-clamp-2.text-sm.mt-1.font-light.leading-snug") ?: return null
+
+        if (
+            el.tagName().equals("a", ignoreCase = true) &&
+            el.hasClass("hd-c")
+        ) {
+            return parseHdCard(
+                el,
+                tvShow = false,
+            ) as? Movie
+        }
+
+        val titleElement =
+            el.selectFirst(
+                "h3.line-clamp-2.text-sm.mt-1.font-light.leading-snug"
+            )
+                ?: return null
+
         val title = titleElement.text().trim()
 
-        val linkElement = el.selectFirst("a.block.relative[href]") ?: return null
+        val linkElement =
+            el.selectFirst("a.block.relative[href]")
+                ?: return null
+
         val href = linkElement.attr("href").trim()
 
-        val posterUrl = el.selectFirst("img")?.attr("data-src") ?: ""
+        val posterUrl =
+            el.selectFirst("img")
+                ?.attr("data-src")
+                .orEmpty()
+
         val poster = normalizeUrl(posterUrl)
 
-        val quality = el.selectFirst("span.absolute")?.text()?.trim()
+        val quality =
+            el.selectFirst("span.absolute")
+                ?.text()
+                ?.trim()
 
         return Movie(
             id = href,
             title = title,
             poster = poster,
-            quality = quality
+            quality = quality,
         )
     }
 
     private fun parseGridItemAsTvShow(el: Element): TvShow? {
-        val titleElement = el.selectFirst("h3.line-clamp-2.text-sm.mt-1.font-light.leading-snug") ?: return null
+
+        if (
+            el.tagName().equals("a", ignoreCase = true) &&
+            el.hasClass("hd-c")
+        ) {
+            return parseHdCard(
+                el,
+                tvShow = true,
+            ) as? TvShow
+        }
+
+        val titleElement =
+            el.selectFirst(
+                "h3.line-clamp-2.text-sm.mt-1.font-light.leading-snug"
+            )
+                ?: return null
+
         val title = titleElement.text().trim()
 
-        val linkElement = el.selectFirst("a.block.relative[href]") ?: return null
+        val linkElement =
+            el.selectFirst("a.block.relative[href]")
+                ?: return null
+
         val href = linkElement.attr("href").trim()
 
-        val posterUrl = el.selectFirst("img")?.attr("data-src") ?: ""
-        val poster = normalizeUrl(posterUrl)
+        val posterUrl =
+            el.selectFirst("img")
+                ?.attr("data-src")
+                .orEmpty()
 
-        val quality = el.selectFirst("span.absolute")?.text()?.trim()
+        val poster = normalizeUrl(posterUrl)
 
         return TvShow(
             id = href,
             title = title,
             poster = poster,
-            quality = quality
         )
     }
 
@@ -492,7 +669,7 @@ object HDFilmeProvider : Provider {
                         service.getMovies(cataloguePage) to false,
                         service.getTvShows(cataloguePage) to true
                     ).flatMap { (document, isTvShow) ->
-                        document.select("div.listing.grid[id=dle-content] div.item.relative.mt-3")
+                        document.select("div.listing.grid[id=dle-content] div.item.relative.mt-3, a.hd-c[href]")
                             .filter { element ->
                                 element.selectFirst("h3.line-clamp-2")?.text()?.contains(query, ignoreCase = true) == true
                             }
@@ -521,7 +698,7 @@ object HDFilmeProvider : Provider {
 
             coroutineScope {
                 val detailSemaphore = Semaphore(4)
-                doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3").map { element ->
+                doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3, a.hd-c[href]").map { element ->
                     async {
                         detailSemaphore.withPermit {
                             val href = element.selectFirst("a.block.relative[href]")
@@ -546,7 +723,7 @@ object HDFilmeProvider : Provider {
 
             coroutineScope {
                 val detailSemaphore = Semaphore(4)
-                doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3").map { element ->
+                doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3, a.hd-c[href]").map { element ->
                     async {
                         detailSemaphore.withPermit {
                             val href = element.selectFirst("a.block.relative[href]")
@@ -844,7 +1021,7 @@ object HDFilmeProvider : Provider {
             }
             val title = doc.selectFirst("h1")?.text()?.trim() ?: ""
 
-            val elements = doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3")
+            val elements = doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3, a.hd-c[href]")
 
             val shows = when {
                 id.contains("/serien/", ignoreCase = true) -> {
@@ -898,7 +1075,7 @@ object HDFilmeProvider : Provider {
             )
         }
 
-        val elements = doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3")
+        val elements = doc.select("div.listing.grid[id=dle-content] div.item.relative.mt-3, a.hd-c[href]")
 
         val filmography = coroutineScope {
             elements.map { el ->
@@ -928,6 +1105,119 @@ object HDFilmeProvider : Provider {
             filmography = filmography
         )
     }
+
+    private suspend fun resolveDeVideoSources(
+        embedUrl: String,
+    ): List<Video.Server> {
+
+        val document = service.getPage(embedUrl)
+
+        val root =
+            document.selectFirst(
+                "main.player-shell[data-resolve-endpoint][data-resolve-token]"
+            )
+                ?: return emptyList()
+
+        val endpointPath =
+            root.attr("data-resolve-endpoint")
+                .trim()
+
+        val endpoint =
+            when {
+                endpointPath.startsWith("http") ->
+                    endpointPath
+
+                else ->
+                    embedUrl
+                        .toHttpUrl()
+                        .resolve(endpointPath)
+                        ?.toString()
+                        ?: return emptyList()
+            }
+
+        val payload =
+            JSONObject().apply {
+                put("type", root.attr("data-type"))
+                put("id", root.attr("data-id"))
+                put(
+                    "season",
+                    root.attr("data-season").ifBlank { "1" }
+                )
+                put(
+                    "episode",
+                    root.attr("data-episode").ifBlank { "1" }
+                )
+                put(
+                    "mode",
+                    root.attr("data-mode").ifBlank { "custom" }
+                )
+                put(
+                    "token",
+                    root.attr("data-resolve-token")
+                )
+            }
+
+        val response =
+            service.postJson(
+                endpoint,
+                payload.toString().toRequestBody(
+                    "application/json".toMediaType()
+                ),
+                embedUrl,
+            ).string()
+
+        val json = JSONObject(response)
+
+        if (!json.optBoolean("ok", false)) {
+            return emptyList()
+        }
+
+        val sources =
+            json.optJSONArray("sources")
+                ?: return emptyList()
+
+        return buildList {
+            for (index in 0 until sources.length()) {
+
+                val source =
+                    sources.optJSONObject(index)
+                        ?: continue
+
+                val url =
+                    source.optString("url")
+                        .trim()
+
+                if (url.isBlank()) {
+                    continue
+                }
+
+                val name =
+                    source.optString("name")
+                        .trim()
+                        .ifBlank {
+                            runCatching {
+                                url.toHttpUrl().host
+                            }.getOrDefault("Server")
+                        }
+
+                val sourceId =
+                    source.optString("id")
+                        .trim()
+                        .ifBlank {
+                            "devideosrc-$index"
+                        }
+
+                add(
+                    Video.Server(
+                        id = sourceId,
+                        name = name,
+                        src = url,
+                    )
+                )
+            }
+        }.distinctBy { it.src }
+    }
+
 
     override suspend fun getServers(id: String, videoType: Video.Type): List<Video.Server> {
         val doc = service.getPage(id)
@@ -1003,32 +1293,105 @@ object HDFilmeProvider : Provider {
             return servers.distinctBy { it.src }
         }
 
-        val iframeSrc = doc.selectFirst("iframe[src*='meinecloud.click']")?.attr("src")
-            ?: throw Exception("Embed iframe not found")
+        // Current HDFilme movie player:
+        // iframe is lazy-loaded through data-src and points to DeVideoSRC.
+        val directEmbed =
+            doc.selectFirst(
+                "iframe#hd-player-frame[data-src]"
+            )
+                ?.attr("data-src")
+                ?.trim()
+                .orEmpty()
 
-        val embedUrl = normalizeUrl(iframeSrc)
-        val embedDoc = service.getPage(embedUrl)
+        if (directEmbed.isNotBlank()) {
 
-        return embedDoc.select("ul._player-mirrors li[data-link]")
-            .filterNot { li ->
-                li.hasClass("fullhd") || li.text().contains("4K Server", ignoreCase = true)
-            }
-            .mapNotNull { li ->
-                val dataLink = li.attr("data-link").trim()
-                if (dataLink.isBlank()) return@mapNotNull null
+            val embedUrl =
+                normalizeExternalUrl(
+                    directEmbed
+                )
 
-                val normalized = when {
-                    dataLink.startsWith("//") -> "https:$dataLink"
-                    dataLink.startsWith("http") -> dataLink
-                    else -> "https://$dataLink"
+            val resolved =
+                runCatching {
+                    resolveDeVideoSources(
+                        embedUrl
+                    )
                 }
+                    .getOrDefault(
+                        emptyList()
+                    )
 
-                val nameText = li.ownText().ifBlank { li.text() }.trim()
-                val name = nameText.ifBlank { "Server" }
-
-                Video.Server(id = normalized, name = name, src = normalized)
+            if (resolved.isNotEmpty()) {
+                return resolved
             }
-            .filter { it.src.isNotBlank() }
+        }
+
+        // Legacy fallback for older HDFilme pages.
+        val iframeSrc =
+            doc.selectFirst(
+                "iframe[src*='meinecloud.click']"
+            )
+                ?.attr("src")
+                ?.trim()
+
+        if (!iframeSrc.isNullOrBlank()) {
+
+            val embedUrl =
+                normalizeUrl(
+                    iframeSrc
+                )
+
+            val embedDoc =
+                service.getPage(
+                    embedUrl
+                )
+
+            return embedDoc
+                .select(
+                    "ul._player-mirrors li[data-link]"
+                )
+                .filterNot { li ->
+                    li.hasClass("fullhd") ||
+                        li.text().contains(
+                            "4K Server",
+                            ignoreCase = true,
+                        )
+                }
+                .mapNotNull { li ->
+
+                    val dataLink =
+                        li.attr("data-link")
+                            .trim()
+
+                    if (dataLink.isBlank()) {
+                        return@mapNotNull null
+                    }
+
+                    val normalized =
+                        normalizeExternalUrl(
+                            dataLink
+                        )
+
+                    val name =
+                        li.ownText()
+                            .ifBlank { li.text() }
+                            .trim()
+                            .ifBlank { "Server" }
+
+                    Video.Server(
+                        id = normalized,
+                        name = name,
+                        src = normalized,
+                    )
+                }
+                .filter {
+                    it.src.isNotBlank()
+                }
+                .distinctBy {
+                    it.src
+                }
+        }
+
+        return emptyList()
     }
 
     override suspend fun getVideo(server: Video.Server): Video {
