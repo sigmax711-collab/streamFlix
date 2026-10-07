@@ -9,44 +9,38 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 /**
- * Sonderbehandlung ausschließlich für Vavoo Live.
+ * Vavoo-only TLS compatibility helper.
  *
- * Hintergrund:
- * Einige aktuelle Vavoo-CDN-Streams sind technisch erreichbar,
- * besitzen aber ein abgelaufenes TLS-Zertifikat.
- *
- * Die Ausnahme wird zusätzlich auf exakt den aufgelösten
- * Stream-Host begrenzt. Andere Provider verwenden diesen
- * Client niemals.
+ * A subset of Vavoo's resolved CDN hosts currently serves working HLS with an
+ * expired certificate. This helper is only attached to the temporary player /
+ * probe client created for a resolved Vavoo Live host. Normal Streamflix
+ * network traffic keeps the standard TLS validation path.
  */
 object VavooTls {
-
     private val trustManager = object : X509TrustManager {
-        override fun checkClientTrusted(
-            chain: Array<out X509Certificate>?,
-            authType: String?
-        ) = Unit
-
-        override fun checkServerTrusted(
-            chain: Array<out X509Certificate>?,
-            authType: String?
-        ) = Unit
-
-        override fun getAcceptedIssuers(): Array<X509Certificate> =
-            emptyArray()
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) = Unit
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
 
     private val sslSocketFactory by lazy {
-        SSLContext
-            .getInstance("TLS")
-            .apply {
-                init(
-                    null,
-                    arrayOf<TrustManager>(trustManager),
-                    SecureRandom()
-                )
+        SSLContext.getInstance("TLS").apply {
+            init(null, arrayOf<TrustManager>(trustManager), SecureRandom())
+        }.socketFactory
+    }
+
+    fun applyTo(builder: OkHttpClient.Builder, targetHost: String) {
+        val host = targetHost.trim().lowercase()
+        if (host.isBlank()) return
+
+        val defaultVerifier = HttpsURLConnection.getDefaultHostnameVerifier()
+
+        builder
+            .sslSocketFactory(sslSocketFactory, trustManager)
+            .hostnameVerifier { requestedHost, session ->
+                requestedHost.equals(host, ignoreCase = true) ||
+                    defaultVerifier.verify(requestedHost, session)
             }
-            .socketFactory
     }
 
     fun relaxForHost(
@@ -73,4 +67,5 @@ object VavooTls {
                     )
             }
     }
+
 }
