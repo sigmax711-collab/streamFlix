@@ -14,6 +14,8 @@ import com.streamflixreborn.streamflix.providers.Provider.Companion.providers
 import com.streamflixreborn.streamflix.providers.TmdbProvider
 import androidx.core.content.edit
 import com.streamflixreborn.streamflix.database.AppDatabase
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
 import org.json.JSONArray
 
@@ -26,7 +28,7 @@ object UserPreferences {
     // Default DoH Provider URL (Cloudflare)
     private const val DEFAULT_DOH_PROVIDER_URL = "https://cloudflare-dns.com/dns-query"
     const val DOH_DISABLED_VALUE = "" // Value to represent DoH being disabled
-    private const val DEFAULT_SERIENSTREAM_DOMAIN = "s.to"
+    private const val DEFAULT_SERIENSTREAM_DOMAIN = "serienstream.to"
     private const val DEFAULT_MOFLIX_DOMAIN = "moflix-stream.xyz"
     private const val DEFAULT_STREAMINGCOMMUNITY_DOMAIN = "streamingunity.cc"
     private const val DEFAULT_CUEVANA_DOMAIN = "cuevana.gs"
@@ -59,6 +61,10 @@ object UserPreferences {
 
             val jsonString = Key.PROVIDER_CACHE.getString() ?: "{}"
             providerCache = runCatching { JSONObject(jsonString) }.getOrDefault(JSONObject())
+
+            // Sync runtime flows with persisted values
+            _recentlyWatchedEnabledFlow.value = Key.ENABLE_RECENTLY_WATCHED.getBoolean() ?: true
+            _tmdbCategoriesFlow.value = tmdbCategories
         }
     }
 
@@ -262,6 +268,16 @@ object UserPreferences {
                     ArtworkRepairScheduler.schedule(StreamFlixApp.instance, currentProvider)
                 }
             }
+        }
+
+    var tmdbCategories: Set<String>
+        get() {
+            val default = setOf("featured", "trending", "popular_movies", "popular_tv", "popular_anime", "netflix", "amazon", "disney", "hulu", "apple", "hbo")
+            return prefs.getStringSet(Key.TMDB_CATEGORIES.name, default) ?: default
+        }
+        set(value) {
+            prefs.edit { putStringSet(Key.TMDB_CATEGORIES.name, value) }
+            _tmdbCategoriesFlow.value = value
         }
 
     var parentalControlPin: String
@@ -600,6 +616,17 @@ object UserPreferences {
         prefs.edit { putString("FAVORITE_SORT_MODE_$providerName", mode) }
     }
 
+    fun setRecentlyWatchedEnabled(value: Boolean) {
+        _recentlyWatchedEnabledFlow.value = value
+        Key.ENABLE_RECENTLY_WATCHED.setBoolean(value)
+    }
+
+    private val _recentlyWatchedEnabledFlow = MutableStateFlow(true)
+    val recentlyWatchedEnabledFlow: StateFlow<Boolean> = _recentlyWatchedEnabledFlow
+
+    private val _tmdbCategoriesFlow = MutableStateFlow<Set<String>>(emptySet())
+    val tmdbCategoriesFlow: StateFlow<Set<String>> = _tmdbCategoriesFlow
+
     private enum class Key {
         APP_LAYOUT,
         CURRENT_LANGUAGE,
@@ -634,6 +661,8 @@ object UserPreferences {
         AUTOPLAY_BUFFER,
         SERVER_AUTO_SUBTITLES_DISABLED,
         ENABLE_TMDB,
+        TMDB_CATEGORIES,
+        ENABLE_RECENTLY_WATCHED,
         PARENTAL_CONTROL_PIN,
         PARENTAL_CONTROL_ADMIN_PIN,
         PARENTAL_CONTROL_MAX_AGE,

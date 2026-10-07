@@ -69,6 +69,7 @@
     <string name="option_show_mark_all_previous_watched">Marcar como visto hasta aquí</string>
     <string name="option_show_mark_all_previous_unwatched">Marcar como no visto hasta aquí</string>
     <string name="option_show_unwatched">Marcar como no visto</string>
+    <string name="option_show_remove_recently_watched">Quitar de Vistos recientemente</string>
     <string name="option_clear_program">Quitar de continuar viendo</string>
     <string name="option_cancel">Cancelar</string>
 
@@ -507,4 +508,26 @@
     <string name="settings_force_extra_buffer_summary">Activa búfer extra para todos los servidores de forma predeterminada</string>
     <string name="supabase_instructions_title">Instrucciones</string>
     <string name="supabase_instructions_summary">Abrir en el navegador la guía detallada para configurar la cuenta y la sincronización de Supabase</string>
+
+    <string name="settings_category_recently_watched">Vistos recientemente</string>
+    <string name="settings_tmdb_categories_title">Categorías de inicio (Proveedor TMDB)</string>
+    <string name="settings_tmdb_categories_summary">Elige qué categorías mostrar en la pantalla principal.</string>
+
+    <string name="tmdb_category_featured">Destacados</string>
+    <string name="tmdb_category_trending">Tendencias</string>
+    <string name="tmdb_category_popular_movies">Películas populares</string>
+    <string name="tmdb_category_popular_tv">Series de TV populares</string>
+    <string name="tmdb_category_popular_anime">Anime populares</string>
+    <string name="tmdb_category_netflix">Popular en Netflix</string>
+    <string name="tmdb_category_amazon">Popular en Amazon</string>
+    <string name="tmdb_category_disney">Popular en Disney+</string>
+    <string name="tmdb_category_hulu">Popular en Hulu</string>
+    <string name="tmdb_category_apple">Popular en Apple TV+</string>
+    <string name="tmdb_category_hbo">Popular en HBO</string>
+    <string name="settings_enable_recently_watched_title">Mostrar Vistos recientemente en Inicio</string>
+    <string name="settings_enable_recently_watched_summary">Muestra la lista de películas y series vistas recientemente en la pantalla principal.</string>
+    <string name="settings_clear_recently_watched_title">Borrar historial de Vistos recientemente</string>
+    <string name="settings_clear_recently_watched_summary">Elimina todos los elementos guardados de la lista de Vistos recientemente.</string>
+    <string name="settings_clear_recently_watched_dialog_message">¿Estás seguro de que deseas borrar todo el historial de Vistos recientemente?</string>
+    <string name="settings_clear_recently_watched_done">Historial de Vistos recientemente borrado.</string>
 </resources>

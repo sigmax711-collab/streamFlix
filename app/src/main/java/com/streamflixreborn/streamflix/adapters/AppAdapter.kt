@@ -111,6 +111,8 @@ class AppAdapter(
         EPISODE_TV_ITEM,
         EPISODE_CONTINUE_WATCHING_MOBILE_ITEM,
         EPISODE_CONTINUE_WATCHING_TV_ITEM,
+        EPISODE_RECENTLY_WATCHED_MOBILE_ITEM,
+        EPISODE_RECENTLY_WATCHED_TV_ITEM,
 
         FOOTER,
 
@@ -127,6 +129,8 @@ class AppAdapter(
         MOVIE_TV_ITEM,
         MOVIE_CONTINUE_WATCHING_MOBILE_ITEM,
         MOVIE_CONTINUE_WATCHING_TV_ITEM,
+        MOVIE_RECENTLY_WATCHED_MOBILE_ITEM,
+        MOVIE_RECENTLY_WATCHED_TV_ITEM,
         MOVIE_GRID_MOBILE_ITEM,
         MOVIE_GRID_TV_ITEM,
         MOVIE_SWIPER_MOBILE_ITEM,
@@ -151,6 +155,8 @@ class AppAdapter(
 
         TV_SHOW_MOBILE_ITEM,
         TV_SHOW_TV_ITEM,
+        TV_SHOW_RECENTLY_WATCHED_MOBILE_ITEM,
+        TV_SHOW_RECENTLY_WATCHED_TV_ITEM,
         TV_SHOW_GRID_MOBILE_ITEM,
         TV_SHOW_GRID_TV_ITEM,
         TV_SHOW_SWIPER_MOBILE_ITEM,
@@ -209,14 +215,16 @@ class AppAdapter(
                 )
             )
 
-            Type.EPISODE_MOBILE_ITEM -> EpisodeViewHolder(
+            Type.EPISODE_MOBILE_ITEM,
+            Type.EPISODE_RECENTLY_WATCHED_MOBILE_ITEM -> EpisodeViewHolder(
                 ItemEpisodeMobileBinding.inflate(
                     LayoutInflater.from(parent.context),
                     parent,
                     false,
                 )
             )
-            Type.EPISODE_TV_ITEM -> EpisodeViewHolder(
+            Type.EPISODE_TV_ITEM,
+            Type.EPISODE_RECENTLY_WATCHED_TV_ITEM -> EpisodeViewHolder(
                 ItemEpisodeTvBinding.inflate(
                     LayoutInflater.from(parent.context),
                     parent,
@@ -277,6 +285,7 @@ class AppAdapter(
             )
 
             Type.MOVIE_CONTINUE_WATCHING_MOBILE_ITEM,
+            Type.MOVIE_RECENTLY_WATCHED_MOBILE_ITEM,
             Type.MOVIE_MOBILE_ITEM -> MovieViewHolder(
                 ItemMovieMobileBinding.inflate(
                     LayoutInflater.from(parent.context),
@@ -285,6 +294,7 @@ class AppAdapter(
                 )
             )
             Type.MOVIE_CONTINUE_WATCHING_TV_ITEM,
+            Type.MOVIE_RECENTLY_WATCHED_TV_ITEM,
             Type.MOVIE_TV_ITEM -> MovieViewHolder(
                 ItemMovieTvBinding.inflate(
                     LayoutInflater.from(parent.context),
@@ -416,14 +426,16 @@ class AppAdapter(
                 )
             )
 
-            Type.TV_SHOW_MOBILE_ITEM -> TvShowViewHolder(
+            Type.TV_SHOW_MOBILE_ITEM,
+            Type.TV_SHOW_RECENTLY_WATCHED_MOBILE_ITEM -> TvShowViewHolder(
                 ItemTvShowMobileBinding.inflate(
                     LayoutInflater.from(parent.context),
                     parent,
                     false
                 )
             )
-            Type.TV_SHOW_TV_ITEM -> TvShowViewHolder(
+            Type.TV_SHOW_TV_ITEM,
+            Type.TV_SHOW_RECENTLY_WATCHED_TV_ITEM -> TvShowViewHolder(
                 ItemTvShowTvBinding.inflate(
                     LayoutInflater.from(parent.context),
                     parent,

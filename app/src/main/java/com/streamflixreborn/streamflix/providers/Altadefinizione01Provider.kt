@@ -586,8 +586,16 @@ object Altadefinizione01Provider : Provider {
                         results.add(
                             Video.Server(
                                 id = vidxgoUrl,
-                                name = "VidxGo",
+                                name = "Player1 (vidxgo)",
                                 src = vidxgoUrl
+                            )
+                        )
+                        val vixsrcUrl = "https://vixsrc.to/tv/tt$imdbId/$seasonNum/$epNum"
+                        results.add(
+                            Video.Server(
+                                id = vixsrcUrl,
+                                name = "Player2 (vixsrc)",
+                                src = vixsrcUrl
                             )
                         )
                     }
@@ -633,11 +641,17 @@ object Altadefinizione01Provider : Provider {
             }
             if (imdbId != null) {
                 val vidxgoUrl = "https://v.vidxgo.co/$imdbId"
+                val vixsrcUrl = "https://vixsrc.to/movie/tt$imdbId"
                 return listOf(
                     Video.Server(
                         id = vidxgoUrl,
-                        name = "VidxGo",
+                        name = "Player1 (vidxgo)",
                         src = vidxgoUrl
+                    ),
+                    Video.Server(
+                        id = vixsrcUrl,
+                        name = "Player2 (vixsrc)",
+                        src = vixsrcUrl
                     )
                 )
             }

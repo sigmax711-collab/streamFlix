@@ -30,11 +30,13 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
+import com.streamflixreborn.streamflix.providers.TmdbProvider
 import java.util.concurrent.ConcurrentHashMap
 
 class HomeViewModel(database: AppDatabase) : ViewModel() {
@@ -149,7 +151,12 @@ class HomeViewModel(database: AppDatabase) : ViewModel() {
             combine(
                 database.movieDao().getRecentlyWatched(),
                 database.tvShowDao().getRecentlyWatched(),
-            ) { movies, tvShows ->
+                UserPreferences.recentlyWatchedEnabledFlow,
+            ) { movies, tvShows, enabled ->
+                if (!enabled) {
+                    return@combine emptyList<AppAdapter.Item>()
+                }
+
                 val episodeIds = tvShows.mapNotNull { it.lastPlayedEpisodeId }.distinct()
                 val episodesById = if (episodeIds.isEmpty()) {
                     emptyMap()
@@ -340,6 +347,17 @@ class HomeViewModel(database: AppDatabase) : ViewModel() {
             UserDataNotifier.updates.collect {
                 val provider = UserPreferences.currentProvider ?: return@collect
                 loadUserDataCache(provider)
+            }
+        }
+        
+        viewModelScope.launch {
+            UserPreferences.tmdbCategoriesFlow.drop(1).collect {
+                val provider = currentProvider
+                if (provider is TmdbProvider) {
+                    val appContext = StreamFlixApp.instance.applicationContext
+                    HomeCacheStore.clear(appContext, provider)
+                    getHome()
+                }
             }
         }
         getHome()

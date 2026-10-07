@@ -12,6 +12,7 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import com.streamflixreborn.streamflix.utils.TMDb3
 
 /**
  * CineHax proxies TMDb metadata (its item ids ARE TMDb ids) through a WordPress theme, so
@@ -88,8 +89,12 @@ object CineHaxProvider : Provider {
         }
         .build()
 
-    private fun get(url: String): String {
-        val request = Request.Builder().url(url).build()
+    private fun get(url: String, referer: String? = null): String {
+        val builder = Request.Builder().url(url)
+        if (referer != null) {
+            builder.header("Referer", referer)
+        }
+        val request = builder.build()
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw Exception("HTTP ${response.code} for $url")
             return response.body?.string().orEmpty()
@@ -129,7 +134,7 @@ object CineHaxProvider : Provider {
     private fun humanizeKey(key: String) = key.replace('_', ' ').replaceFirstChar { it.uppercase() }
 
     override suspend fun getHome(): List<Category> {
-        val json = JSONObject(get("$baseUrl/wp-json/primeshow/v1/home-data"))
+        val json = JSONObject(get("$baseUrl/wp-json/cinehax/v1/home-data"))
         val categories = mutableListOf<Category>()
         json.keys().forEach { key ->
             val items = json.optJSONArray(key) ?: return@forEach
@@ -141,6 +146,34 @@ object CineHaxProvider : Provider {
         return categories
     }
 
+    @Volatile
+    private var cachedNonce: String? = null
+
+    private fun getValidNonce(): String {
+        cachedNonce?.let { return it }
+        val html = get(baseUrl)
+        val nonce = Regex(""""nonce"\s*:\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
+            ?: throw Exception("Nonce not found in CineHax")
+        cachedNonce = nonce
+        return nonce
+    }
+
+    private fun fetchWithNonce(action: String, queryParams: String): JSONObject {
+        val urlBuilder = { nonce: String -> "$baseUrl/wp-admin/admin-ajax.php?action=$action&$queryParams&nonce=$nonce" }
+        var response = try {
+            get(urlBuilder(getValidNonce()))
+        } catch (e: Exception) {
+            ""
+        }
+        
+        // If 403 or failed, clear nonce and retry once
+        if (response.isBlank() || response.contains("Forbidden") || !JSONObject(response).optBoolean("success")) {
+            cachedNonce = null
+            response = get(urlBuilder(getValidNonce()))
+        }
+        return JSONObject(response)
+    }
+
     override suspend fun search(query: String, page: Int): List<AppAdapter.Item> {
         if (query.isBlank()) {
             if (page > 1) return emptyList()
@@ -148,22 +181,21 @@ object CineHaxProvider : Provider {
         }
         if (page > 1) return emptyList()
 
-        val url = "$baseUrl/wp-admin/admin-ajax.php?action=tmdb_live_search&query=${URLEncoder.encode(query, "UTF-8")}"
-        val json = JSONObject(get(url))
+        val queryParams = "query=${URLEncoder.encode(query, "UTF-8")}"
+        val json = fetchWithNonce("tmdb_live_search", queryParams)
         if (!json.optBoolean("success")) return emptyList()
         val results = json.optJSONArray("data") ?: return emptyList()
         return (0 until results.length()).mapNotNull { results.optJSONObject(it)?.toShow() }
     }
 
     private fun fetchExplorePage(type: String, page: Int, genre: String = "", sort: String = "popular"): List<Show> {
-        val url = "$baseUrl/wp-admin/admin-ajax.php?action=load_explore_data" +
-                "&page=$page&type=$type&genre=$genre&network=&language=&sort=$sort&q="
-        val json = JSONObject(get(url))
+        val queryParams = "page=$page&type=$type&genre=$genre&network=&language=&sort=$sort&q="
+        val json = fetchWithNonce("load_explore_data", queryParams)
         if (!json.optBoolean("success")) return emptyList()
         val html = json.optJSONObject("data")?.optString("html").orEmpty()
         if (html.isBlank()) return emptyList()
 
-        return Jsoup.parse(html).select("a[href*=/watch/]").mapNotNull { a ->
+        return Jsoup.parse(html).select("a[href*=/ver/]").mapNotNull { a ->
             val id = Regex("""id=(\d+)""").find(a.attr("href"))?.groupValues?.get(1) ?: return@mapNotNull null
             val title = a.selectFirst("h3")?.text().orEmpty()
             val poster = a.selectFirst("img")?.attr("src")
@@ -275,20 +307,24 @@ object CineHaxProvider : Provider {
         Regex("""https://image\.tmdb\.org/t/p/w500/[^"]+""").find(html)?.value
 
     private fun extractTrailer(html: String): String? {
-        val embedUrl = Regex("""id="iframe-trailer" src="([^"]+)"""").find(html)?.groupValues?.get(1)
-        return embedUrl?.substringAfterLast("/")?.let { "https://www.youtube.com/watch?v=$it" }
+        val youtubeId = Regex("""id="trailer-thumb"[^>]*src="[^"]*/vi/([^/]+)/""").find(html)?.groupValues?.get(1)
+        return youtubeId?.let { "https://www.youtube.com/watch?v=$it" }
     }
 
     override suspend fun getMovie(id: String): Movie {
         val meta = parseWatchPage(get("$baseUrl/watch/?type=movie&id=$id"))
+        
+        // Fetch missing title/backdrop from TMDb since CineHax removed them from the HTML
+        val tmdb = runCatching { TMDb3.Movies.details(id.toInt(), language = language) }.getOrNull()
+        
         return Movie(
             id = id,
-            title = meta.title,
-            overview = meta.overview,
+            title = tmdb?.title ?: meta.title,
+            overview = tmdb?.overview ?: meta.overview,
             released = meta.released,
             rating = meta.rating,
             poster = meta.poster,
-            banner = meta.backdrop,
+            banner = tmdb?.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" } ?: meta.backdrop,
             trailer = meta.trailer,
             genres = meta.genres,
         )
@@ -306,14 +342,16 @@ object CineHaxProvider : Provider {
             .toList()
             .ifEmpty { listOf(1) }
 
+        val tmdb = runCatching { TMDb3.TvSeries.details(id.toInt(), language = language) }.getOrNull()
+
         return TvShow(
             id = id,
-            title = meta.title,
-            overview = meta.overview,
+            title = tmdb?.name ?: meta.title,
+            overview = tmdb?.overview ?: meta.overview,
             released = meta.released,
             rating = meta.rating,
             poster = meta.poster,
-            banner = meta.backdrop,
+            banner = tmdb?.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" } ?: meta.backdrop,
             trailer = meta.trailer,
             genres = meta.genres,
             seasons = seasonNumbers.map { number -> Season(id = "$id-$number", number = number, title = "Temporada $number") },
@@ -323,7 +361,7 @@ object CineHaxProvider : Provider {
     override suspend fun getEpisodesBySeason(seasonId: String): List<Episode> {
         val tvId = seasonId.substringBeforeLast("-")
         val seasonNumber = seasonId.substringAfterLast("-").toIntOrNull() ?: 1
-        val html = get("$baseUrl/watch/?type=tv&id=$tvId&season=$seasonNumber&episode=1")
+        val html = get("$baseUrl/ver/?tipo=serie&id=$tvId&season=$seasonNumber&episode=1")
 
         // Episode entries are the only "season=N&episode=" anchors that contain a thumbnail
         // <img> - the season-selector chips link to the same URL shape but have no image.
@@ -354,15 +392,14 @@ object CineHaxProvider : Provider {
 
     override suspend fun getServers(id: String, videoType: Video.Type): List<Video.Server> {
         val watchUrl = when (videoType) {
-            is Video.Type.Movie -> "$baseUrl/watch/?type=movie&id=$id"
+            is Video.Type.Movie -> "$baseUrl/ver/?tipo=pelicula&id=$id"
             is Video.Type.Episode -> {
                 val parts = id.split("|")
                 val tvId = parts.getOrNull(0) ?: return emptyList()
                 val season = parts.getOrNull(1) ?: "1"
                 val episode = parts.getOrNull(2) ?: "1"
-                "$baseUrl/watch/?type=tv&id=$tvId&season=$season&episode=$episode"
+                "$baseUrl/ver/?tipo=serie&id=$tvId&season=$season&episode=$episode"
             }
-            else -> return emptyList()
         }
 
         val doc = Jsoup.parse(get(watchUrl))
@@ -383,8 +420,8 @@ object CineHaxProvider : Provider {
     }
 
     private fun resolveUnlimplayServers(embedPageUrl: String): List<Video.Server> {
-        val embedHtml = get(embedPageUrl)
-        val embedsJson = Regex("""const EMBEDS\s*=\s*(\{.*?\});""")
+        val embedHtml = get(embedPageUrl, referer = "$baseUrl/")
+        val embedsJson = Regex("""finalizePlayer\s*\(\s*(\{.*?\})\s*\)""")
             .find(embedHtml)?.groupValues?.get(1)
             ?: return emptyList()
         val embeds = JSONObject(embedsJson)

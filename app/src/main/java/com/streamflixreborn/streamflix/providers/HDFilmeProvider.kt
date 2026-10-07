@@ -26,15 +26,21 @@ import retrofit2.Retrofit
 import okhttp3.OkHttpClient
 import okhttp3.Interceptor
 import okhttp3.Response
+import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import org.json.JSONObject
 import retrofit2.http.GET
 import retrofit2.http.Headers
 import retrofit2.http.Url
 import retrofit2.http.Path
+import retrofit2.http.POST
+import retrofit2.http.Body
 import com.streamflixreborn.streamflix.utils.UserPreferences
 
 object HDFilmeProvider : Provider {
@@ -48,7 +54,7 @@ object HDFilmeProvider : Provider {
     override val logo: String = "$baseUrl/templates/hdfilme/images/apple-touch-icon.png"
     override val language: String = "de"
 
-    private const val USER_AGENT = "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    private const val USER_AGENT = "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 
     private interface HDFilmeService {
         companion object {
@@ -129,6 +135,10 @@ object HDFilmeProvider : Provider {
             @Path("page") page: Int
         ): Document
 
+        @Headers(USER_AGENT, "Content-Type: application/json")
+        @POST
+        suspend fun postJson(@Url url: String, @Body body: RequestBody): ResponseBody
+
     }
 
     @Volatile
@@ -171,56 +181,91 @@ object HDFilmeProvider : Provider {
         val doc = service.getHome()
         val categories = mutableListOf<Category>()
 
-        val sliderItems = coroutineScope {
-            doc.select("ul.glide__slides li.glide__slide").map { el ->
-                async { parseSliderItem(el) }
-            }.awaitAll().filterNotNull()
-        }
-
+        val sliderItems = doc.select("ul.glide__slides li.glide__slide").mapNotNull { parseSliderItem(it) }
         if (sliderItems.isNotEmpty()) {
             categories.add(Category(name = Category.FEATURED, list = sliderItems))
         }
 
-        val listingDiv = doc.selectFirst("div.listing.grid[id=dle-content]")
-        if (listingDiv != null) {
-            val items = listingDiv.select("div.item.relative.mt-3").mapNotNull { parseGridItem(it) }
-            if (items.isNotEmpty()) {
-                categories.add(Category(name = "Filme", list = items))
+        doc.select("section.hd-row").forEach { section ->
+            val category = parseRowSection(section)
+            if (category != null) {
+                categories.add(category)
             }
-        }
-
-        val latestMoviesSection = doc.selectFirst("section.sidebar-section:has(h3:containsOwn(neueste Filme eingefügt))")
-        val latestMoviesItems = latestMoviesSection?.select("div.listing > a")?.mapNotNull { parseSidebarItemAsMovie(it) } ?: emptyList()
-        if (latestMoviesItems.isNotEmpty()) {
-            categories.add(Category(name = "Neueste Filme Eingefügt", list = latestMoviesItems))
-        }
-
-        val latestSeriesSection = doc.selectFirst("section.sidebar-section:has(h3:containsOwn(neueste Serie eingefügt))")
-        val latestSeriesItems = latestSeriesSection?.select("div.listing > a")?.mapNotNull { parseSidebarItemAsTvShow(it) } ?: emptyList()
-        if (latestSeriesItems.isNotEmpty()) {
-            categories.add(Category(name = "Neueste Serie Eingefügt", list = latestSeriesItems))
         }
 
         return categories
     }
 
-    private suspend fun parseSliderItem(el: Element): Movie? {
-        val title = el.selectFirst("h3.title")?.text()?.trim() ?: return null
+    private fun parseSliderItem(el: Element): Movie? {
+        val titleLogo = el.selectFirst(".hd-slide-title img.hd-slide-logo")?.attr("alt")?.trim()
+        val bgImgAlt = el.selectFirst(".hd-slide-bg img")?.attr("alt")?.trim()
+        val titleText = el.selectFirst(".hd-slide-title")?.text()?.trim()
+        val title = titleLogo.takeIf { !it.isNullOrBlank() }
+            ?: bgImgAlt.takeIf { !it.isNullOrBlank() }
+            ?: titleText.takeIf { !it.isNullOrBlank() }
+            ?: return null
 
-        val linkElement = el.selectFirst("div.actions a.watchnow") ?: return null
-        val href = linkElement.attr("href").trim()
+        val cta = el.selectFirst("a.hd-slide-cta") ?: return null
+        val href = cta.attr("href").trim().ifBlank { return null }
 
-        val bannerUrl = el.selectFirst("img")?.attr("data-src") ?: ""
+        val bannerUrl = el.selectFirst(".hd-slide-bg img")?.attr("src") ?: ""
         val banner = normalizeUrl(bannerUrl)
 
-        val tmdbMovie = TmdbUtils.getMovie(title, language = language)
+        val ratingText = el.selectFirst(".hd-slide-badge")?.text()?.replace("★", "")?.trim()
+        val rating = ratingText?.toDoubleOrNull()
 
         return Movie(
             id = href,
             title = title,
             banner = banner,
-            rating = tmdbMovie?.rating
+            rating = rating
         )
+    }
+
+    private fun parseRowSection(section: Element): Category? {
+        val sectionTitle = section.selectFirst(".hd-row-title")?.text()?.trim() ?: return null
+        val cards = section.select(".hd-scroller a.hd-c")
+        if (cards.isEmpty()) return null
+
+        val items = cards.mapNotNull { card ->
+            val href = card.attr("href").trim()
+            if (href.isBlank()) return@mapNotNull null
+
+            val titleEl = card.selectFirst(".hd-c-title, .hd-cw-title")
+            val title = titleEl?.text()?.trim()
+                .takeIf { !it.isNullOrBlank() }
+                ?: card.attr("title").trim()
+                .takeIf { !it.isNullOrBlank() }
+                ?: return@mapNotNull null
+
+            val imgEl = card.selectFirst(".hd-c-img img")
+            val imgSrc = imgEl?.attr("src")?.trim() ?: ""
+            val poster = normalizeUrl(imgSrc)
+
+            val meta = card.selectFirst(".hd-c-meta, .hd-cw-meta")?.text()?.trim() ?: ""
+            val rating = Regex("""★\s*([\d.]+)""").find(meta)?.groupValues?.get(1)?.toDoubleOrNull()
+
+            val isTvShow = sectionTitle.contains("Serien", ignoreCase = true) || href.contains("/serien/", ignoreCase = true)
+
+            if (isTvShow) {
+                TvShow(
+                    id = href,
+                    title = title,
+                    poster = poster,
+                    rating = rating
+                )
+            } else {
+                Movie(
+                    id = href,
+                    title = title,
+                    poster = poster,
+                    rating = rating
+                )
+            }
+        }
+
+        if (items.isEmpty()) return null
+        return Category(name = sectionTitle, list = items)
     }
 
     private fun parseGridItem(el: Element): Movie? {
@@ -321,8 +366,72 @@ object HDFilmeProvider : Provider {
     private suspend fun getSerialDocument(doc: Document): Document? {
         val imdbId = extractImdbId(doc) ?: return null
         return runCatching {
-            service.getPage("https://meinecloud.click/serial/${imdbId.removePrefix("tt")}")
+            service.getPage("https://devideosrc.co/serial/${imdbId.removePrefix("tt")}")
         }.getOrNull()
+    }
+
+    private fun extractDevideosrcToken(doc: Document): String? {
+        // Movies: token in data-resolve-token on the <main> element
+        doc.selectFirst("main[data-resolve-token]")
+            ?.attr("data-resolve-token")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        // TV shows: token in scripts
+        val scripts = doc.select("script").joinToString("\n") { it.data() }
+        return Regex("""token:\s*"([^"]+)"""").find(scripts)?.groupValues?.get(1)
+    }
+
+    private suspend fun postDevideosrcApi(
+        imdbId: String,
+        type: String,
+        token: String,
+        season: String? = null,
+        episode: String? = null,
+        mode: String? = null
+    ): JSONObject? {
+        val endpoint: String
+        val jsonBody: String
+        if (season != null && episode != null && mode != null) {
+            endpoint = "https://devideosrc.co/api/resolve"
+            jsonBody = """{"type":"$type","id":"$imdbId","season":"$season","episode":"$episode","mode":"$mode","token":"$token"}"""
+        } else {
+            endpoint = "https://devideosrc.co/api/embed-links"
+            jsonBody = """{"type":"$type","id":"$imdbId","token":"$token"}"""
+        }
+        val body = jsonBody.toRequestBody("application/json".toMediaType())
+        return runCatching {
+            JSONObject(service.postJson(endpoint, body).string())
+        }.getOrNull()
+    }
+
+    private suspend fun getApiValidEpisodes(doc: Document): Map<Int, Set<Int>>? {
+        val imdbId = extractImdbId(doc) ?: return null
+        val serialDoc = getSerialDocument(doc) ?: return null
+        val token = extractDevideosrcToken(serialDoc) ?: return null
+        val json = postDevideosrcApi(imdbId, "tv", token) ?: return null
+        if (!json.optBoolean("ok")) return null
+        val tvObj = json.optJSONObject("tv") ?: return null
+        val seasonsArr = tvObj.optJSONArray("seasons") ?: return null
+
+        val map = mutableMapOf<Int, Set<Int>>()
+        for (i in 0 until seasonsArr.length()) {
+            val seasonObj = seasonsArr.getJSONObject(i)
+            val sNum = seasonObj.optInt("season_number")
+            val episodesArr = seasonObj.optJSONArray("episodes") ?: continue
+            val validEps = mutableSetOf<Int>()
+            for (j in 0 until episodesArr.length()) {
+                val epObj = episodesArr.getJSONObject(j)
+                val epNum = epObj.optInt("episode_number")
+                val sources = epObj.optJSONArray("sources")
+                if (sources != null && sources.length() > 0) {
+                    validEps.add(epNum)
+                }
+            }
+            if (validEps.isNotEmpty()) {
+                map[sNum] = validEps
+            }
+        }
+        return map
     }
 
     private fun serialSeasonNumber(season: Element, serialDoc: Document): Int? {
@@ -339,16 +448,15 @@ object HDFilmeProvider : Provider {
         serialDoc: Document,
         tmdbEpisodes: List<Episode> = emptyList()
     ): List<Episode> {
-        val season = serialDoc.select("._season-eps").firstOrNull {
+        val season = serialDoc.select("._grp[data-season]").firstOrNull {
             serialSeasonNumber(it, serialDoc) == seasonNumber
         } ?: return emptyList()
 
-        return season.select("._ep").mapNotNull { element ->
-            val episodeNumber = element.selectFirst("._ep-n")?.text()?.trim()?.toIntOrNull()
-                ?: Regex("S\\d+\\s*E(\\d+)", RegexOption.IGNORE_CASE)
-                    .find(element.attr("data-label"))?.groupValues?.get(1)?.toIntOrNull()
+        return season.select("._ep[data-episode]").mapNotNull { element ->
+            val episodeNumber = element.attr("data-episode").toIntOrNull()
+                ?: element.selectFirst("._epn")?.text()?.trim()?.removePrefix("E")?.toIntOrNull()
                 ?: return@mapNotNull null
-            val siteTitle = element.selectFirst("._ep-t")?.text()?.trim()?.takeIf { it.isNotBlank() }
+            val siteTitle = element.selectFirst("._ept")?.text()?.trim()?.takeIf { it.isNotBlank() }
             val tmdbEpisode = tmdbEpisodes.find { it.number == episodeNumber }
 
             Episode(
@@ -510,7 +618,6 @@ object HDFilmeProvider : Provider {
                 when (item) {
                     is Movie -> item.id
                     is TvShow -> item.id
-                    else -> item.toString()
                 }
             }
         }
@@ -696,11 +803,21 @@ object HDFilmeProvider : Provider {
 
         val rating = metadataDiv?.selectFirst("p.imdb-badge span.imdb-rate")?.text()?.trim()?.toDoubleOrNull()
 
+        val apiValidEpisodesMap = getApiValidEpisodes(doc)
+
         val seasons = mutableListOf<Season>()
         val serialDoc = getSerialDocument(doc)
-        serialDoc?.select("._season-eps")?.forEach { serialSeason ->
+        serialDoc?.select("._grp[data-season]")?.forEach { serialSeason ->
             val seasonNumber = serialSeasonNumber(serialSeason, serialDoc) ?: return@forEach
-            val episodes = parseSerialEpisodes(id, seasonNumber, serialDoc)
+            if (apiValidEpisodesMap != null && !apiValidEpisodesMap.containsKey(seasonNumber)) {
+                return@forEach
+            }
+            var episodes = parseSerialEpisodes(id, seasonNumber, serialDoc)
+            val validEpsForSeason = apiValidEpisodesMap?.get(seasonNumber)
+            if (validEpsForSeason != null) {
+                episodes = episodes.filter { it.number in validEpsForSeason }
+            }
+
             if (episodes.isNotEmpty()) {
                 seasons.add(
                     Season(
@@ -792,8 +909,14 @@ object HDFilmeProvider : Provider {
         val tmdbTvShow = TmdbUtils.getTvShow(tmdbTitle, language = language)
         val tmdbEpisodes = tmdbTvShow?.let { TmdbUtils.getEpisodesBySeason(it.id, seasonNumber, language = language) } ?: emptyList()
 
+        val apiValidEpisodesMap = getApiValidEpisodes(doc)
+
         getSerialDocument(doc)?.let { serialDoc ->
-            val serialEpisodes = parseSerialEpisodes(showUrl, seasonNumber, serialDoc, tmdbEpisodes)
+            var serialEpisodes = parseSerialEpisodes(showUrl, seasonNumber, serialDoc, tmdbEpisodes)
+            val validEpsForSeason = apiValidEpisodesMap?.get(seasonNumber)
+            if (validEpsForSeason != null) {
+                serialEpisodes = serialEpisodes.filter { it.number in validEpsForSeason }
+            }
             if (serialEpisodes.isNotEmpty()) return serialEpisodes
         }
 
@@ -938,97 +1061,81 @@ object HDFilmeProvider : Provider {
             val seasonNum = episodePart.substringAfter('s').substringBefore('e').toIntOrNull() ?: return emptyList()
             val epNum = episodePart.substringAfter('e').toIntOrNull() ?: return emptyList()
 
-            val showDoc = doc
-            getSerialDocument(showDoc)?.let { serialDoc ->
-                val season = serialDoc.select("._season-eps").firstOrNull {
-                    serialSeasonNumber(it, serialDoc) == seasonNum
-                }
-                val episode = season?.select("._ep")?.firstOrNull { element ->
-                    element.selectFirst("._ep-n")?.text()?.trim()?.toIntOrNull() == epNum
-                }
-                val streamUrl = episode?.attr("data-link")?.trim().orEmpty()
-                if (streamUrl.isNotBlank()) {
-                    val normalized = normalizeExternalUrl(streamUrl)
-                    val serverName = runCatching {
-                        normalized.toHttpUrl().host.substringBefore('.').replaceFirstChar { it.uppercase() }
-                    }.getOrDefault("Server")
-                    return listOf(Video.Server(id = normalized, name = serverName, src = normalized))
-                }
-            }
-            val servers = mutableListOf<Video.Server>()
+            val imdbId = extractImdbId(doc) ?: return emptyList()
+            val serialDoc = getSerialDocument(doc) ?: return emptyList()
+            val token = extractDevideosrcToken(serialDoc) ?: return emptyList()
+            val json = postDevideosrcApi(imdbId, "tv", token) ?: return emptyList()
+            if (!json.optBoolean("ok")) return emptyList()
+            val tvObj = json.optJSONObject("tv") ?: return emptyList()
+            val seasonsArr = tvObj.optJSONArray("seasons") ?: return emptyList()
 
-            showDoc.select("div#se-accordion div.su-spoiler").forEach { spoiler ->
-                val seasonTitle = spoiler.selectFirst("div.su-spoiler-title")?.text()?.trim() ?: return@forEach
-                val seasonNumberMatch = Regex("Staffel\\s+(\\d+)").find(seasonTitle)
-                val currentSeasonNum = seasonNumberMatch?.groupValues?.get(1)?.toIntOrNull() ?: return@forEach
-
-                if (currentSeasonNum == seasonNum) {
-                    val content = spoiler.selectFirst("div.su-spoiler-content") ?: return@forEach
-
-                    val episodeRegex = Regex("""${seasonNum}x${epNum}\s+Episode\s+\d+""")
-                    val lines = content.html().split("<br>")
-
-                    lines.forEach { line ->
-                        if (episodeRegex.find(line) != null) {
-                            val linkElements = Jsoup.parse(line).select("a[href]")
-                            linkElements.forEach { link ->
-                                val serverName = link.text().trim()
-                                val serverUrl = link.attr("href").trim()
-
-                                if (!serverUrl.contains("/engine/player.php") &&
-                                    !serverName.contains("Player HD", ignoreCase = true) &&
-                                    !serverName.contains("4K", ignoreCase = true) &&
-                                    serverUrl.isNotBlank()) {
-
-                                    val normalized = when {
-                                        serverUrl.startsWith("http") -> serverUrl
-                                        serverUrl.startsWith("//") -> "https:$serverUrl"
-                                        else -> serverUrl
-                                    }
-
-                                    servers.add(
-                                        Video.Server(
-                                            id = normalized,
-                                            name = serverName.ifBlank { "Server" },
-                                            src = normalized
-                                        )
-                                    )
-                                }
-                            }
+            for (si in 0 until seasonsArr.length()) {
+                val season = seasonsArr.getJSONObject(si)
+                if (season.optInt("season_number") != seasonNum) continue
+                val episodes = season.optJSONArray("episodes") ?: continue
+                for (ei in 0 until episodes.length()) {
+                    val episode = episodes.getJSONObject(ei)
+                    if (episode.optInt("episode_number") != epNum) continue
+                    val sources = episode.optJSONArray("sources") ?: return emptyList()
+                    val validSources = (0 until sources.length()).mapNotNull { i ->
+                        val src = sources.getJSONObject(i)
+                        val url = src.optString("url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        val rawName = src.optString("name")
+                        Pair(url, rawName)
+                    }
+                    return validSources.mapIndexed { index, (url, rawName) ->
+                        val cleanName = rawName.substringBefore(".").trim().replaceFirstChar { it.uppercase() }
+                        val serverName = if (cleanName.isNotBlank() && !cleanName.equals("Server", ignoreCase = true)) {
+                            "Server ${index + 1} ($cleanName)"
+                        } else {
+                            "Server ${index + 1}"
                         }
+                        Video.Server(id = url, name = serverName, src = url)
                     }
                 }
             }
-
-            return servers.distinctBy { it.src }
+            return emptyList()
         }
 
-        val iframeSrc = doc.selectFirst("iframe[src*='meinecloud.click']")?.attr("src")
+        val iframe = doc.selectFirst("iframe[src*='devideosrc.co'], iframe[data-src*='devideosrc.co']")
             ?: throw Exception("Embed iframe not found")
+        val iframeSrc = iframe.attr("data-src").takeIf { it.isNotBlank() } ?: iframe.attr("src")
+        val embedDoc = service.getPage(iframeSrc)
 
-        val embedUrl = normalizeUrl(iframeSrc)
-        val embedDoc = service.getPage(embedUrl)
+        val playerMain = embedDoc.selectFirst("main[data-resolve-token][data-id]")
+            ?: throw Exception("Player main element not found")
+        val imdbId = playerMain.attr("data-id").takeIf { it.isNotBlank() }
+            ?: throw Exception("IMDB id not found in player element")
+        val token = extractDevideosrcToken(embedDoc)
+            ?: throw Exception("Resolve token not found")
+        val season = playerMain.attr("data-season").takeIf { it.isNotBlank() }
+            ?: throw Exception("Season not found in player element")
+        val episode = playerMain.attr("data-episode").takeIf { it.isNotBlank() }
+            ?: throw Exception("Episode not found in player element")
+        val mode = playerMain.attr("data-mode").takeIf { it.isNotBlank() }
+            ?: throw Exception("Mode not found in player element")
 
-        return embedDoc.select("ul._player-mirrors li[data-link]")
-            .filterNot { li ->
-                li.hasClass("fullhd") || li.text().contains("4K Server", ignoreCase = true)
+        val json = postDevideosrcApi(imdbId, "movie", token, season, episode, mode)
+            ?: throw Exception("API resolve call failed")
+
+        if (!json.optBoolean("ok")) return emptyList()
+        val sourcesArr = json.optJSONArray("sources") ?: return emptyList()
+
+        val validSources = (0 until sourcesArr.length()).mapNotNull { i ->
+            val src = sourcesArr.getJSONObject(i)
+            val url = src.optString("url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val rawName = src.optString("name")
+            Pair(url, rawName)
+        }
+        return validSources.mapIndexed { index, (url, rawName) ->
+            val cleanName = rawName.substringBefore(".").trim().replaceFirstChar { it.uppercase() }
+            val serverName = if (cleanName.isNotBlank() && !cleanName.equals("Server", ignoreCase = true)) {
+                "Server ${index + 1} ($cleanName)"
+            } else {
+                "Server ${index + 1}"
             }
-            .mapNotNull { li ->
-                val dataLink = li.attr("data-link").trim()
-                if (dataLink.isBlank()) return@mapNotNull null
-
-                val normalized = when {
-                    dataLink.startsWith("//") -> "https:$dataLink"
-                    dataLink.startsWith("http") -> dataLink
-                    else -> "https://$dataLink"
-                }
-
-                val nameText = li.ownText().ifBlank { li.text() }.trim()
-                val name = nameText.ifBlank { "Server" }
-
-                Video.Server(id = normalized, name = name, src = normalized)
-            }
-            .filter { it.src.isNotBlank() }
+            Video.Server(id = url, name = serverName, src = url)
+        }
     }
 
     override suspend fun getVideo(server: Video.Server): Video {

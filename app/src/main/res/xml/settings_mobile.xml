@@ -21,6 +21,15 @@
                 android:defaultValue="true"
                 app:iconSpaceReserved="false" />
 
+            <MultiSelectListPreference
+                android:key="TMDB_CATEGORIES"
+                android:title="@string/settings_tmdb_categories_title"
+                android:summary="@string/settings_tmdb_categories_summary"
+                android:entries="@array/tmdb_home_categories_entries"
+                android:entryValues="@array/tmdb_home_categories_values"
+                android:defaultValue="@array/tmdb_home_categories_default"
+                app:iconSpaceReserved="false" />
+
             <EditTextPreference
                 android:key="TMDB_API_KEY"
                 android:title="@string/settings_tmdb_api_key"
@@ -73,6 +82,25 @@
                 android:key="PARENTAL_CONTROL_UNLOCK"
                 android:title="@string/settings_parental_unlock_title"
                 android:summary="@string/settings_parental_unlock_summary"
+                app:iconSpaceReserved="false" />
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            android:key="pc_recently_watched_settings"
+            android:title="@string/settings_category_recently_watched"
+            app:iconSpaceReserved="false">
+
+            <SwitchPreferenceCompat
+                android:key="ENABLE_RECENTLY_WATCHED"
+                android:title="@string/settings_enable_recently_watched_title"
+                android:summary="@string/settings_enable_recently_watched_summary"
+                android:defaultValue="true"
+                app:iconSpaceReserved="false" />
+
+            <Preference
+                android:key="CLEAR_RECENTLY_WATCHED"
+                android:title="@string/settings_clear_recently_watched_title"
+                android:summary="@string/settings_clear_recently_watched_summary"
                 app:iconSpaceReserved="false" />
         </PreferenceCategory>
     </PreferenceScreen>

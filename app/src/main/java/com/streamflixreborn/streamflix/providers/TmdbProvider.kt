@@ -80,31 +80,33 @@ class TmdbProvider(override val language: String) : Provider {
             }
         }
 
-        val trendingDeferred = async {
+        val enabledCategories = UserPreferences.tmdbCategories
+
+        val trendingDeferred = if ("featured" in enabledCategories || "trending" in enabledCategories) async {
             awaitAll(
                 async { TMDb3.Trending.all(TMDb3.Params.TimeWindow.DAY, page = 1, language = language) },
                 async { TMDb3.Trending.all(TMDb3.Params.TimeWindow.DAY, page = 2, language = language) },
                 async { TMDb3.Trending.all(TMDb3.Params.TimeWindow.DAY, page = 3, language = language) },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val popularMoviesDeferred = async {
+        val popularMoviesDeferred = if ("popular_movies" in enabledCategories) async {
             awaitAll(
                 async { TMDb3.MovieLists.popular(page = 1, language = language) },
                 async { TMDb3.MovieLists.popular(page = 2, language = language) },
                 async { TMDb3.MovieLists.popular(page = 3, language = language) },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val popularTvShowsDeferred = async {
+        val popularTvShowsDeferred = if ("popular_tv" in enabledCategories) async {
             awaitAll(
                 async { TMDb3.TvSeriesLists.popular(page = 1, language = language) },
                 async { TMDb3.TvSeriesLists.popular(page = 2, language = language) },
                 async { TMDb3.TvSeriesLists.popular(page = 3, language = language) },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val popularAnimeDeferred = async {
+        val popularAnimeDeferred = if ("popular_anime" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -121,9 +123,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val netflixDeferred = async {
+        val netflixDeferred = if ("netflix" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -139,9 +141,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val amazonDeferred = async {
+        val amazonDeferred = if ("amazon" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -157,9 +159,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val disneyDeferred = async {
+        val disneyDeferred = if ("disney" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -175,9 +177,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val huluDeferred = async {
+        val huluDeferred = if ("hulu" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -193,9 +195,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val appleDeferred = async {
+        val appleDeferred = if ("apple" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -211,9 +213,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val hboDeferred = async {
+        val hboDeferred = if ("hbo" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.tv(
@@ -230,133 +232,156 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
+        } else null
+
+        if (trendingDeferred != null) {
+            val trending = trendingDeferred.await()
+            if ("featured" in enabledCategories) {
+                categories.add(
+                    Category(
+                        name = Category.FEATURED,
+                        list = trending.safeSubList(0, 5).mapNotNull(mapMulti)
+                    )
+                )
+            }
+            if ("trending" in enabledCategories) {
+                categories.add(
+                    Category(
+                        name = getTranslation("Trending"),
+                        list = trending.safeSubList(5, trending.size).mapNotNull(mapMulti)
+                    )
+                )
+            }
         }
 
-        val trending = trendingDeferred.await()
-        categories.add(
-            Category(
-                name = Category.FEATURED,
-                list = trending.safeSubList(0, 5).mapNotNull(mapMulti)
+        popularMoviesDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular Movies"),
+                    list = it.mapNotNull(mapMulti)
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Trending"),
-                list = trending.safeSubList(5, trending.size).mapNotNull(mapMulti)
+        popularTvShowsDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular TV Shows"),
+                    list = it.mapNotNull(mapMulti)
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular Movies"),
-                list = popularMoviesDeferred.await().mapNotNull(mapMulti)
-            )
-        )
-
-        categories.add(
-            Category(
-                name = getTranslation("Popular TV Shows"),
-                list = popularTvShowsDeferred.await().mapNotNull(mapMulti)
-            )
-        )
-
-        categories.add(
-            Category(
-                name = getTranslation("Popular Anime"),
-                list = popularAnimeDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        popularAnimeDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular Anime"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Netflix"),
-                list = netflixDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        netflixDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Netflix"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Amazon"),
-                list = amazonDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        amazonDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Amazon"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Disney+"),
-                list = disneyDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        disneyDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Disney+"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Hulu"),
-                list = huluDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        huluDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Hulu"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Apple TV+"),
-                list = appleDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        appleDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Apple TV+"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on HBO"),
-                list = hboDeferred.await().mapNotNull(mapMulti),
+        hboDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on HBO"),
+                    list = it.mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
         categories
     }

@@ -407,6 +407,36 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
         bindProviderDomainCheckButtons()
         bindAnimeOnlineNinjaPreferredServer()
 
+        findPreference<Preference>("CLEAR_RECENTLY_WATCHED")?.setOnPreferenceClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle(getString(R.string.settings_clear_recently_watched_title))
+                .setMessage(getString(R.string.settings_clear_recently_watched_dialog_message))
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                        AppDatabase.getInstance(requireContext()).movieDao().clearAllRecentlyWatched()
+                        AppDatabase.getInstance(requireContext()).tvShowDao().clearAllRecentlyWatched()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(requireContext(), getString(R.string.settings_clear_recently_watched_done), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            true
+        }
+
+        findPreference<SwitchPreferenceCompat>("ENABLE_RECENTLY_WATCHED")?.setOnPreferenceChangeListener { _, newValue ->
+            UserPreferences.setRecentlyWatchedEnabled(newValue as Boolean)
+            true
+        }
+
+        findPreference<androidx.preference.MultiSelectListPreference>("TMDB_CATEGORIES")?.setOnPreferenceChangeListener { _, newValue ->
+            @Suppress("UNCHECKED_CAST")
+            val selected = newValue as? Set<String> ?: emptySet()
+            UserPreferences.tmdbCategories = selected
+            true
+        }
+
         findPreference<EditTextPreference>("TMDB_API_KEY")?.apply {
             summary = if (UserPreferences.tmdbApiKey.isEmpty()) getString(R.string.settings_tmdb_api_key_summary) else UserPreferences.tmdbApiKey
             text = UserPreferences.tmdbApiKey
