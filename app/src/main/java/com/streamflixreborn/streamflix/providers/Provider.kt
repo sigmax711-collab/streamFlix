@@ -102,6 +102,7 @@ interface Provider {
             FrenchStreamProvider to ProviderSupport(movies = true, tvShows = true),
             GuardaSerieProvider to ProviderSupport(movies = true, tvShows = true),
             EinschaltenProvider to ProviderSupport(movies = true, tvShows = false),
+            KellerKinoProvider to ProviderSupport(movies = true, tvShows = false),
             HDFilmeProvider to ProviderSupport(movies = true, tvShows = true),
             MEGAKinoProvider to ProviderSupport(movies = true, tvShows = true),
             FilmyOnlineCcProvider to ProviderSupport(movies = true, tvShows = true),
@@ -127,7 +128,8 @@ interface Provider {
             VavooProvider("it") to ProviderSupport(movies = false, tvShows = true),
             VavooProvider("fr") to ProviderSupport(movies = false, tvShows = true),
             VavooProvider("es") to ProviderSupport(movies = false, tvShows = true),
-            VavooProvider("pl") to ProviderSupport(movies = false, tvShows = true)
+            VavooProvider("pl") to ProviderSupport(movies = false, tvShows = true),
+            VavooProvider("en") to ProviderSupport(movies = false, tvShows = true)
         )
 
         // Helper functions to check support

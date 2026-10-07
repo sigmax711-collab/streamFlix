@@ -31,9 +31,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONTokener
 import okhttp3.Request
 import java.io.ByteArrayInputStream
+import org.json.JSONTokener
 import kotlin.coroutines.resume
 
 class WebViewResolver(private val context: Context) {
@@ -102,7 +102,7 @@ class WebViewResolver(private val context: Context) {
     private var dialog: AlertDialog? = null
     private val mutex = Mutex()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val TAG = "WebviewResolver"
+    private val TAG = "WebViewResolver"
 
     private var cursorX = 0f
     private var cursorY = 0f
@@ -289,8 +289,8 @@ class WebViewResolver(private val context: Context) {
 
                 override fun onPageFinished(view: WebView?, currentUrl: String?) {
                     Log.d(TAG, "[WebView] onPageFinished: $currentUrl")
-                    applyMobilePageZoomOnce(view, currentUrl)
                     view?.evaluateJavascript(POPUP_BLOCKER_SCRIPT, null)
+                    applyMobilePageZoomOnce(view, currentUrl)
                     mainHandler.postDelayed({
                         if (webView != null) {
                             checkChallengeStatus(
@@ -315,6 +315,24 @@ class WebViewResolver(private val context: Context) {
         } else {
             webView?.loadUrl(url, headers)
         }
+    }
+
+    private fun applyMobilePageZoomOnce(view: WebView?, currentUrl: String?) {
+        if (view == null || currentUrl.isNullOrBlank() || lastMobileZoomUrl == currentUrl) return
+        lastMobileZoomUrl = currentUrl
+        view.evaluateJavascript(
+            """
+                (function() {
+                    const zoom = '$PAGE_ZOOM';
+                    document.documentElement.style.zoom = zoom;
+                    if (document.body) {
+                        document.body.style.zoom = zoom;
+                    }
+                    return zoom;
+                })();
+            """.trimIndent(),
+            null
+        )
     }
 
     /** Route ordinary WebView GET resources through the app's DoH-backed client. */
@@ -379,24 +397,6 @@ class WebViewResolver(private val context: Context) {
             "text/plain",
             "UTF-8",
             ByteArrayInputStream(ByteArray(0))
-        )
-    }
-
-    private fun applyMobilePageZoomOnce(view: WebView?, currentUrl: String?) {
-        if (view == null || currentUrl.isNullOrBlank() || lastMobileZoomUrl == currentUrl) return
-        lastMobileZoomUrl = currentUrl
-        view.evaluateJavascript(
-            """
-                (function() {
-                    const zoom = '$PAGE_ZOOM';
-                    document.documentElement.style.zoom = zoom;
-                    if (document.body) {
-                        document.body.style.zoom = zoom;
-                    }
-                    return zoom;
-                })();
-            """.trimIndent(),
-            null
         )
     }
 
