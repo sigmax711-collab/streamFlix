@@ -36,7 +36,10 @@ import java.io.ByteArrayInputStream
 import org.json.JSONTokener
 import kotlin.coroutines.resume
 
-class WebViewResolver(private val context: Context) {
+class WebViewResolver(
+    private val context: Context,
+    requireTvConfirmation: Boolean = false,
+) {
 
     private companion object {
         private const val INITIAL_SCALE = 85
@@ -113,6 +116,8 @@ class WebViewResolver(private val context: Context) {
     private var deferredLoadHeaders: Map<String, String> = emptyMap()
     private var lastMobileZoomUrl: String? = null
     private val isTv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    private val requiresConfirmation = isTv && requireTvConfirmation
+    private var continueButton: Button? = null
     private val activityContext: Activity?
         get() = context.findActivity() ?: StreamFlixApp.currentActivity
 
@@ -151,7 +156,7 @@ class WebViewResolver(private val context: Context) {
         Log.d(TAG, "[WebView] Fetching: $url (IsTV: $isTv)")
         pollingCount = 0
         loginKeyboardPrimed = false
-        val result = withTimeoutOrNull(120000) {
+        val resolve: suspend () -> Result = {
             suspendCancellableCoroutine { continuation ->
                 mainHandler.post {
                     setupWebView(
@@ -168,6 +173,8 @@ class WebViewResolver(private val context: Context) {
                 continuation.invokeOnCancellation { cleanup() }
             }
         }
+        // A user-controlled captcha session must remain open until Continue or Back.
+        val result = if (requiresConfirmation) resolve() else withTimeoutOrNull(120000) { resolve() }
         if (result == null) Log.e(TAG, "[WebView] Global Timeout for $url")
         return@withLock result ?: Result(
             html = "<html><body>Timeout</body></html>",
@@ -308,10 +315,10 @@ class WebViewResolver(private val context: Context) {
         }
         Log.d(TAG, "[WebView] Opened")
 
-        if (showImmediately && activityContext != null) {
+        if ((showImmediately || requiresConfirmation) && activityContext != null) {
             deferredLoadUrl = url
             deferredLoadHeaders = headers
-            showVisibleChallenge(continuation)
+            showVisibleChallenge(continuation, valueScript)
         } else {
             webView?.loadUrl(url, headers)
         }
@@ -440,7 +447,7 @@ class WebViewResolver(private val context: Context) {
             )
 
             // Se rileviamo sblocco, chiudiamo tutto subito
-            if (success) {
+            if (success && !requiresConfirmation) {
                 Log.d(TAG, "[WebView] SUCCESS detected! Closing bypass.")
                 cookieManager.flush()
                 if (continuation.isActive) {
@@ -452,7 +459,7 @@ class WebViewResolver(private val context: Context) {
             // Se dopo 2 polling (circa 3-4 secondi) non c'è contenuto, mostriamo il dialog per sbloccare
             if (dialog == null && activityContext != null && (isChallenge || (pollingCount >= 2 && !hasContent))) {
                 Log.d(TAG, "[WebView] Visible challenge UI needed")
-                showVisibleChallenge(continuation)
+                showVisibleChallenge(continuation, valueScript)
             }
 
             pollingCount++
@@ -469,7 +476,7 @@ class WebViewResolver(private val context: Context) {
                 }, 2000)
             } else {
                 Log.w(TAG, "[WebView] Max polling reached")
-                if (continuation.isActive) {
+                if (continuation.isActive && !requiresConfirmation) {
                     finalizeResult(view, cleanHtml, currentUrl, cookies, valueScript, continuation)
                 }
             }
@@ -520,7 +527,10 @@ class WebViewResolver(private val context: Context) {
         }
     }
 
-    private fun showVisibleChallenge(continuation: kotlinx.coroutines.CancellableContinuation<Result>) {
+    private fun showVisibleChallenge(
+        continuation: kotlinx.coroutines.CancellableContinuation<Result>,
+        valueScript: String? = null,
+    ) {
         if (dialog != null || webView == null) return
         mainHandler.post {
             try {
@@ -549,6 +559,16 @@ class WebViewResolver(private val context: Context) {
                                     }
 
                                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                                        continueButton?.let { button ->
+                                            val location = IntArray(2)
+                                            button.getLocationOnScreen(location)
+                                            if (cursorX >= location[0] && cursorX < location[0] + button.width &&
+                                                cursorY >= location[1] && cursorY < location[1] + button.height
+                                            ) {
+                                                button.performClick()
+                                                return true
+                                            }
+                                        }
                                         Log.d(TAG, "[WebView] TV OK Key -> Simulating Mouse")
                                         simulateHumanMouseClick()
                                         return true
@@ -585,12 +605,43 @@ class WebViewResolver(private val context: Context) {
                     infoParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
                     rootContainer.addView(btnInfo, infoParams)
 
+                    if (requiresConfirmation) {
+                        continueButton = Button(uiContext).apply {
+                            id = View.generateViewId()
+                            text = context.getString(R.string.bypass_action_continue)
+                            isFocusable = false
+                            setOnClickListener {
+                                val view = webView ?: return@setOnClickListener
+                                view.evaluateJavascript("document.documentElement.innerHTML") { html ->
+                                    if (continuation.isActive) {
+                                        val currentUrl = view.url
+                                        val cookieManager = CookieManager.getInstance()
+                                        val cookies = currentUrl?.let(cookieManager::getCookie).orEmpty()
+                                        cookieManager.flush()
+                                        finalizeResult(
+                                            view,
+                                            decodeJavascriptValue(html).orEmpty(),
+                                            currentUrl,
+                                            cookies,
+                                            valueScript,
+                                            continuation,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        val buttonParams = RelativeLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT)
+                        buttonParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                        rootContainer.addView(continueButton, buttonParams)
+                    }
+
                     val webContainer = FrameLayout(uiContext).apply {
                         id = View.generateViewId()
                         setBackgroundColor(Color.WHITE)
                     }
                     val webParams = RelativeLayout.LayoutParams(-1, -1)
                     webParams.addRule(RelativeLayout.BELOW, btnInfo.id)
+                    continueButton?.let { webParams.addRule(RelativeLayout.ABOVE, it.id) }
                     rootContainer.addView(webContainer, webParams)
 
                     (webView?.parent as? ViewGroup)?.removeView(webView)
@@ -786,6 +837,7 @@ class WebViewResolver(private val context: Context) {
                 webView?.destroy()
                 webView = null
                 virtualCursor = null
+                continueButton = null
                 Log.d(TAG, "[WebView] Closed")
             } catch (e: Exception) {
             }
@@ -798,4 +850,3 @@ class WebViewResolver(private val context: Context) {
         }
     }
 }
-
