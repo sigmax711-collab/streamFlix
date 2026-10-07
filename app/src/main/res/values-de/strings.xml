@@ -502,7 +502,6 @@
     <string name="settings_refresh_cache_success">Cache erfolgreich aktualisiert</string>
     <string name="supabase_instructions_title">Anleitung</string>
     <string name="supabase_instructions_summary">Die ausführliche Anleitung zur Einrichtung von Supabase-Konto und Synchronisierung im Browser öffnen</string>
-    <string name="player_vavoo_vod_not_available_lang_message">In %s nicht verfügbar. Auf Vavoo VOD in anderen Sprachen suchen.</string>
 
     <string name="settings_provider_domain_check">Domain prüfen / aktualisieren</string>
     <string name="settings_provider_domain_check_summary">Weiterleitungen prüfen und eine neue Domain automatisch übernehmen</string>
