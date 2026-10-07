@@ -70,6 +70,7 @@ import com.streamflixreborn.streamflix.utils.ProfileSwitchPinGuard
 import com.streamflixreborn.streamflix.utils.ThemeManager
 import com.streamflixreborn.streamflix.utils.UserDataCache
 import com.streamflixreborn.streamflix.utils.UserPreferences
+import com.streamflixreborn.streamflix.utils.DomainRedirectChecker
 import com.streamflixreborn.streamflix.utils.WebSocketBypassTestHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -243,6 +244,7 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
     private fun displaySettings() {
         updateOverviewLabels()
         updateProviderVisibilityState()
+        bindGenericProviderDomain()
         SupabaseSettingsController.bind(this, lifecycleScope) { key ->
             findPreference(key)
         }
@@ -413,6 +415,7 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             }
         }
 
+        bindProviderDomainCheckButtons()
         bindAnimeOnlineNinjaPreferredServer()
 
         findPreference<EditTextPreference>("TMDB_API_KEY")?.apply {
@@ -499,7 +502,7 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             startActivity(
                 Intent(
                     Intent.ACTION_VIEW,
-                    Uri.parse("https://github.com/streamflix-reborn2/streamflix")
+                    Uri.parse("https://git.gay/streamflix-reborn2/streamflix")
                 )
             )
             true
@@ -1496,6 +1499,82 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             ProfileManager.activeProfile?.name ?: getString(R.string.profile_edit_btn)
     }
 
+
+    private fun configurableDomainDefault(providerName: String?): String? =
+        when (providerName) {
+            "AniWorld" -> "https://aniworld.to/"
+            "Filmpalast" -> "https://filmpalast.to/"
+            "HDFilme" -> "https://hdfilme.cafe/"
+            "MEGAKino" -> "https://megakino12.com"
+            "Einschalten" -> "https://einschalten.in"
+            "Kellerkino" -> "https://www.kellerkino.com/"
+            else -> null
+        }
+
+    private fun bindGenericProviderDomain() {
+        val provider = UserPreferences.currentProvider ?: return
+        val defaultBaseUrl = configurableDomainDefault(provider.name) ?: return
+
+        findPreference<EditTextPreference>("provider_domain_generic")?.apply {
+            val displayDomain =
+                UserPreferences.providerDomainForDisplay(provider.name, defaultBaseUrl)
+
+            summary = displayDomain
+
+            val customDomain = UserPreferences.getProviderCustomDomain(provider.name)
+            text = customDomain.ifBlank { null }
+
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                editText.imeOptions = EditorInfo.IME_ACTION_DONE
+                editText.hint = UserPreferences.providerDomainForDisplay(
+                    provider.name,
+                    defaultBaseUrl
+                )
+            }
+
+            setOnPreferenceChangeListener { preference, newValue ->
+                val typed = (newValue as String).trim()
+
+                if (typed.isBlank()) {
+                    UserPreferences.resetProviderCustomDomain(provider.name)
+                } else {
+                    UserPreferences.setProviderCustomDomain(provider.name, typed)
+                }
+
+                preference.summary =
+                    UserPreferences.providerDomainForDisplay(provider.name, defaultBaseUrl)
+
+                ProviderChangeNotifier.notifyProviderChanged()
+
+                true
+            }
+        }
+
+        findPreference<Preference>("provider_domain_generic_reset")
+            ?.setOnPreferenceClickListener {
+                UserPreferences.resetProviderCustomDomain(provider.name)
+
+                findPreference<EditTextPreference>("provider_domain_generic")?.apply {
+                    text = null
+                    summary = UserPreferences.providerDomainForDisplay(
+                        provider.name,
+                        defaultBaseUrl
+                    )
+                }
+
+                ProviderChangeNotifier.notifyProviderChanged()
+
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.settings_provider_domain_reset_done),
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                true
+            }
+    }
+
     private fun updateProviderVisibilityState() {
         val isStreamingCommunity = UserPreferences.currentProvider is StreamingCommunityProvider
         val isSerienStream = UserPreferences.currentProvider is SerienStreamProvider
@@ -1503,9 +1582,20 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
         val isCuevana = UserPreferences.currentProvider?.name == "Cuevana 3"
         val isPoseidon = UserPreferences.currentProvider?.name == "Poseidonhd2"
         val isAnimeOnlineNinja = UserPreferences.currentProvider is AnimeOnlineNinjaProvider
+        val hasGenericDomain =
+            configurableDomainDefault(UserPreferences.currentProvider?.name) != null
         val hasConfigProvider = UserPreferences.currentProvider is ProviderConfigUrl
-        val hasSpecificOptions = isStreamingCommunity || isCuevana || isPoseidon || isAnimeOnlineNinja
+        val hasSpecificOptions =
+            isStreamingCommunity ||
+                isSerienStream ||
+                isMoflix ||
+                isCuevana ||
+                isPoseidon ||
+                isAnimeOnlineNinja ||
+                hasGenericDomain
 
+        findPreference<PreferenceCategory>("pc_generic_provider_domain_settings")?.isVisible =
+            hasGenericDomain
         findPreference<PreferenceCategory>("pc_streamingcommunity_settings")?.isVisible = isStreamingCommunity
         findPreference<PreferenceCategory>("pc_serienstream_settings")?.isVisible = isSerienStream
         findPreference<PreferenceCategory>("pc_moflix_settings")?.isVisible = isMoflix
@@ -1513,6 +1603,191 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
         findPreference<PreferenceCategory>("pc_poseidon_settings")?.isVisible = isPoseidon
         findPreference<PreferenceCategory>("pc_animeonlineninja_settings")?.isVisible = isAnimeOnlineNinja
         findPreference<PreferenceCategory>("pc_provider_empty_state")?.isVisible = !hasConfigProvider && !hasSpecificOptions
+    }
+
+    private fun bindProviderDomainCheckButtons() {
+
+        fun showDomainCheckResult(
+            result: Result<String>
+        ) {
+            result.onSuccess { message ->
+                Toast.makeText(
+                    requireContext(),
+                    message,
+                    Toast.LENGTH_LONG
+                ).show()
+            }.onFailure { error ->
+                Toast.makeText(
+                    requireContext(),
+                    getString(
+                        R.string.settings_provider_domain_check_failed,
+                        error.message ?: error.javaClass.simpleName
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        fun checkAndUpdate(
+            currentValue: () -> String,
+            saveValue: (String) -> Unit,
+            saveHostOnly: Boolean = false,
+            afterSave: (() -> Unit)? = null,
+        ) {
+            viewLifecycleOwner.lifecycleScope.launch {
+
+                val result = runCatching {
+                    val checked =
+                        DomainRedirectChecker.check(currentValue())
+
+                    if (!checked.changed) {
+                        return@runCatching getString(
+                            R.string.settings_provider_domain_check_current
+                        )
+                    }
+
+                    val valueToSave =
+                        if (saveHostOnly) {
+                            DomainRedirectChecker.hostOnly(
+                                checked.finalUrl
+                            )
+                        } else {
+                            checked.finalUrl
+                        }
+
+                    saveValue(valueToSave)
+                    afterSave?.invoke()
+
+                    getString(
+                        R.string.settings_provider_domain_check_updated,
+                        valueToSave
+                    )
+                }
+
+                showDomainCheckResult(result)
+            }
+        }
+
+        // PR1 generic German providers:
+        // AniWorld, FilmPalast, HDFilme, MEGAKino, Einschalten
+        findPreference<Preference>(
+            "provider_domain_generic_check"
+        )?.setOnPreferenceClickListener {
+
+            val provider =
+                UserPreferences.currentProvider
+
+            val providerName =
+                provider?.name
+
+            val defaultBase =
+                configurableDomainDefault(providerName)
+
+            if (
+                providerName.isNullOrBlank() ||
+                defaultBase.isNullOrBlank()
+            ) {
+                Toast.makeText(
+                    requireContext(),
+                    getString(
+                        R.string.settings_provider_domain_check_failed,
+                        "Provider not supported"
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return@setOnPreferenceClickListener true
+            }
+
+            val current =
+                UserPreferences.resolveProviderBaseUrl(
+                    providerName,
+                    defaultBase
+                )
+
+            checkAndUpdate(
+                currentValue = { current },
+                saveValue = { newDomain ->
+                    UserPreferences.setProviderCustomDomain(
+                        providerName,
+                        newDomain
+                    )
+                },
+                afterSave = {
+                    findPreference<EditTextPreference>(
+                        "provider_domain_generic"
+                    )?.apply {
+                        text =
+                            UserPreferences.providerDomainForDisplay(
+                                providerName,
+                                defaultBase
+                            )
+
+                        summary = text
+                    }
+                }
+            )
+
+            true
+        }
+
+        // SerienStream stores only the hostname
+        findPreference<Preference>(
+            "provider_serienstream_domain_check"
+        )?.setOnPreferenceClickListener {
+
+            checkAndUpdate(
+                currentValue = {
+                    UserPreferences.serienstreamDomain
+                },
+                saveValue = { newDomain ->
+                    UserPreferences.serienstreamDomain = newDomain
+                },
+                saveHostOnly = true,
+                afterSave = {
+                    findPreference<EditTextPreference>(
+                        "provider_serienstream_domain"
+                    )?.apply {
+                        text =
+                            UserPreferences.serienstreamDomain
+
+                        summary =
+                            UserPreferences.serienstreamDomain
+                    }
+                }
+            )
+
+            true
+        }
+
+        // Moflix stores only the hostname
+        findPreference<Preference>(
+            "provider_moflix_domain_check"
+        )?.setOnPreferenceClickListener {
+
+            checkAndUpdate(
+                currentValue = {
+                    UserPreferences.moflixDomain
+                },
+                saveValue = { newDomain ->
+                    UserPreferences.moflixDomain = newDomain
+                },
+                saveHostOnly = true,
+                afterSave = {
+                    findPreference<EditTextPreference>(
+                        "provider_moflix_domain"
+                    )?.apply {
+                        text =
+                            UserPreferences.moflixDomain
+
+                        summary =
+                            UserPreferences.moflixDomain
+                    }
+                }
+            )
+
+            true
+        }
     }
 
     private fun bindAnimeOnlineNinjaPreferredServer() {
