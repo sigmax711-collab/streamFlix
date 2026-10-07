@@ -1483,6 +1483,7 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             "Filmpalast" -> "https://filmpalast.to/"
             "HDFilme" -> "https://hdfilme.cafe/"
             "MEGAKino" -> "https://megakino12.com"
+            "KinoGer" -> "https://kinoger.beer/"
             "Einschalten" -> "https://einschalten.in"
             "Kellerkino" -> "https://www.kellerkino.com/"
             else -> null
