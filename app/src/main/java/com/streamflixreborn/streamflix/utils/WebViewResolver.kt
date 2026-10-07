@@ -25,6 +25,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.RelativeLayout
+import androidx.core.view.doOnLayout
 import com.streamflixreborn.streamflix.R
 import com.streamflixreborn.streamflix.StreamFlixApp
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -114,7 +115,6 @@ class WebViewResolver(
     private var loginKeyboardPrimed = false
     private var deferredLoadUrl: String? = null
     private var deferredLoadHeaders: Map<String, String> = emptyMap()
-    private var lastMobileZoomUrl: String? = null
     private val isTv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     private val requiresConfirmation = isTv && requireTvConfirmation
     private var continueButton: Button? = null
@@ -220,7 +220,8 @@ class WebViewResolver(
                 javaScriptCanOpenWindowsAutomatically = false
                 setSupportMultipleWindows(false)
             }
-            setInitialScale(INITIAL_SCALE)
+            // Let overview mode fit the confirmation page to the measured viewport.
+            setInitialScale(if (requiresConfirmation) 0 else INITIAL_SCALE)
 
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -297,7 +298,7 @@ class WebViewResolver(
                 override fun onPageFinished(view: WebView?, currentUrl: String?) {
                     Log.d(TAG, "[WebView] onPageFinished: $currentUrl")
                     view?.evaluateJavascript(POPUP_BLOCKER_SCRIPT, null)
-                    applyMobilePageZoomOnce(view, currentUrl)
+                    applyPageZoom(view)
                     mainHandler.postDelayed({
                         if (webView != null) {
                             checkChallengeStatus(
@@ -324,9 +325,10 @@ class WebViewResolver(
         }
     }
 
-    private fun applyMobilePageZoomOnce(view: WebView?, currentUrl: String?) {
-        if (view == null || currentUrl.isNullOrBlank() || lastMobileZoomUrl == currentUrl) return
-        lastMobileZoomUrl = currentUrl
+    private fun applyPageZoom(view: WebView?) {
+        if (view == null || view !== webView) return
+        // Cloudflare can replace the document without changing its URL. A new
+        // WebView can also revisit that URL, so zoom must not be cached by URL.
         view.evaluateJavascript(
             """
                 (function() {
@@ -706,8 +708,12 @@ class WebViewResolver(
                     val pendingHeaders = deferredLoadHeaders
                     deferredLoadUrl = null
                     deferredLoadHeaders = emptyMap()
-                    webView?.post {
-                        webView?.loadUrl(pendingUrl, pendingHeaders)
+                    val pendingView = webView
+                    pendingView?.doOnLayout {
+                        if (continuation.isActive && webView === pendingView) {
+                            Log.d(TAG, "[WebView] Loading after layout: ${pendingView.width}x${pendingView.height}")
+                            pendingView.loadUrl(pendingUrl, pendingHeaders)
+                        }
                     }
                 }
             } catch (e: Exception) {
