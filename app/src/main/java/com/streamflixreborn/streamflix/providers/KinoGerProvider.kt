@@ -289,71 +289,339 @@ object KinoGerProvider : Provider {
         }
     }
 
-    override suspend fun getServers(id: String, videoType: Video.Type): List<Video.Server> {
-        val showId = id.substringBefore("#s")
-        val episodeNo = Regex("#s\\d+e(\\d+)", RegexOption.IGNORE_CASE).find(id)
-            ?.groupValues?.getOrNull(1)?.toIntOrNull()
-        val doc = service.get(absolute(showId))
-        val urls = linkedSetOf<String>()
+    override suspend fun getServers(
+        id: String,
+        videoType: Video.Type,
+    ): List<Video.Server> {
 
-        // xStream parity for KinoGer:
-        // movies expose hoster URLs in show(..., 'URL') calls;
-        // series keep per-season/per-episode provider URL arrays.
-        val idMatch = Regex("#s(\\d+)e(\\d+)", RegexOption.IGNORE_CASE).find(id)
-        val seasonNo = idMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
-        val selectedEpisodeNo = idMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
+        val showId =
+            id.substringBefore("#s")
 
-        if (seasonNo != null && selectedEpisodeNo != null) {
-            extractXStreamEpisodeUrls(doc.html(), seasonNo, selectedEpisodeNo)
-                .filter(::isKinoGerVideoCandidate)
-                .forEach(urls::add)
-        } else {
-            Regex(
-                """show[^>]*?\\d+[^>]*?'(https?://[^']+)'""",
-                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        val doc =
+            service.get(
+                absolute(showId)
             )
-                .findAll(doc.html())
-                .map { it.groupValues[1].replace("\\/", "/") }
-                .filter(::isKinoGerVideoCandidate)
-                .forEach(urls::add)
+
+        val idMatch =
+            Regex(
+                "#s(\\d+)e(\\d+)",
+                RegexOption.IGNORE_CASE,
+            ).find(id)
+
+        val seasonNo =
+            idMatch
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+
+        val episodeNo =
+            idMatch
+                ?.groupValues
+                ?.getOrNull(2)
+                ?.toIntOrNull()
+
+        val servers =
+            linkedMapOf<String, Pair<String, String>>()
+
+        fun addServer(
+            name: String,
+            rawUrl: String,
+        ) {
+            if (rawUrl.isBlank()) {
+                return
+            }
+
+            val url =
+                normalizeUrl(
+                    rawUrl
+                        .replace("\\/", "/")
+                        .replace("&amp;", "&")
+                )
+
+            /*
+             * This URL already comes from a KinoGer-specific playback
+             * element (.player-mirrors[data-link] or serie-S_E[data-link]).
+             * Do not run it through the old generic stream-candidate filter:
+             * that filter can reject valid embed hosts such as DeVideoSrc,
+             * Vidara, VOE or Firestream.
+             */
+            if (
+                !url.startsWith("https://", ignoreCase = true) &&
+                !url.startsWith("http://", ignoreCase = true)
+            ) {
+                return
+            }
+
+            val host =
+                runCatching {
+                    java.net.URI(url)
+                        .host
+                        ?.lowercase()
+                        ?.removePrefix("www.")
+                }.getOrNull()
+                    ?: return
+
+            val blockedHosts =
+                listOf(
+                    "disqus.com",
+                    "disquscdn.com",
+                    "facebook.com",
+                    "instagram.com",
+                    "twitter.com",
+                    "x.com",
+                    "youtube.com",
+                    "youtu.be",
+                    "google.com",
+                    "googleapis.com",
+                    "gstatic.com",
+                    "doubleclick.net",
+                    "googlesyndication.com",
+                    "recaptcha.net",
+                )
+
+            if (
+                blockedHosts.any { blocked ->
+                    host == blocked ||
+                        host.endsWith(".$blocked")
+                }
+            ) {
+                return
+            }
+
+            /*
+             * Trailer / advertising / premium buttons are not playback
+             * mirrors and must never appear as KinoGer servers.
+             */
+            if (
+                host == "youtube.com" ||
+                host.endsWith(".youtube.com") ||
+                host == "youtu.be" ||
+                url.contains(
+                    "/vod/vpn",
+                    ignoreCase = true,
+                )
+            ) {
+                return
+            }
+
+            val cleanName =
+                name
+                    .replace(
+                        Regex("\\s+"),
+                        " ",
+                    )
+                    .trim()
+                    .ifBlank {
+                        hostName(url)
+                    }
+
+            servers.putIfAbsent(
+                url,
+                cleanName to url,
+            )
         }
 
-        /*
-         * Do NOT scan every iframe / anchor / URL on the page.
-         *
-         * KinoGer pages contain unrelated third-party URLs such as Disqus.
-         * Movie mirrors come from show(...) calls above; episode mirrors come
-         * from the xStream episode arrays.
-         */
+        if (
+            seasonNo != null &&
+            episodeNo != null
+        ) {
+            /*
+             * Current KinoGer series markup:
+             *
+             * <li id="serie-1_1">
+             *   ...
+             *   <a data-link="https://voe.sx/e/...">Vega</a>
+             * </li>
+             *
+             * Select ONLY the requested season/episode.
+             */
+            val episodeContainer =
+                doc.getElementById(
+                    "serie-${seasonNo}_${episodeNo}"
+                )
 
-        // KinoGer/iOS fallback: MeineCloud serial page for episode server discovery.
-        if (episodeNo != null) {
-            extractImdbId(doc)?.let { imdb ->
-                runCatching {
-                    val serial = service.get("https://meinecloud.click/serial/${imdb.removePrefix("tt")}")
-                    serial.select(
-                        "._ep[data-link], " +
-                            "._ep[data-url], " +
-                            "._ep iframe[src], " +
-                            "._ep a[href], " +
-                            "[data-label][data-link], " +
-                            "[data-label][data-url]"
-                    ).forEach { el ->
-                        val label = el.attr("data-label")
-                        if (label.isBlank() || Regex("E0*${episodeNo}\\b", RegexOption.IGNORE_CASE).containsMatchIn(label)) {
-                            listOf("data-link", "data-url", "src", "href").forEach { attr ->
-                                val u = normalizeUrl(el.attr(attr))
-                                if (isKinoGerVideoCandidate(u)) urls += u
-                            }
-                        }
-                    }
+            episodeContainer
+                ?.select("a[data-link]")
+                ?.forEach { element ->
+
+                    val rawUrl =
+                        element
+                            .attr("data-link")
+                            .trim()
+
+                    val name =
+                        element
+                            .text()
+                            .replace(
+                                Regex("\\s+"),
+                                " ",
+                            )
+                            .trim()
+
+                    addServer(
+                        name = name,
+                        rawUrl = rawUrl,
+                    )
                 }
+
+            /*
+             * Older KinoGer/xStream fallback.
+             * Keep this because KinoGer may still use the old JS arrays
+             * for individual titles.
+             */
+            if (servers.isEmpty()) {
+                extractXStreamEpisodeUrls(
+                    doc.html(),
+                    seasonNo,
+                    episodeNo,
+                ).forEach { url ->
+                    addServer(
+                        name = hostName(url),
+                        rawUrl = url,
+                    )
+                }
+            }
+
+            /*
+             * Existing MeineCloud fallback.
+             */
+            if (servers.isEmpty()) {
+                extractImdbId(doc)
+                    ?.let { imdb ->
+                        runCatching {
+                            service.get(
+                                "https://meinecloud.click/serial/" +
+                                    imdb.removePrefix("tt")
+                            )
+                        }
+                            .getOrNull()
+                            ?.let { serial ->
+
+                                serial
+                                    .select(
+                                        "._ep[data-link], " +
+                                            "._ep[data-url], " +
+                                            "._ep iframe[src], " +
+                                            "._ep a[href], " +
+                                            "[data-label][data-link], " +
+                                            "[data-label][data-url]"
+                                    )
+                                    .forEach { element ->
+
+                                        val label =
+                                            element
+                                                .attr("data-label")
+                                                .trim()
+
+                                        if (
+                                            label.isBlank() ||
+                                            Regex(
+                                                "E0*${episodeNo}\\b",
+                                                RegexOption.IGNORE_CASE,
+                                            ).containsMatchIn(label)
+                                        ) {
+                                            listOf(
+                                                "data-link",
+                                                "data-url",
+                                                "src",
+                                                "href",
+                                            ).forEach { attribute ->
+
+                                                val raw =
+                                                    element
+                                                        .attr(attribute)
+                                                        .trim()
+
+                                                if (raw.isNotBlank()) {
+                                                    addServer(
+                                                        name =
+                                                            element.text()
+                                                                .trim(),
+                                                        rawUrl = raw,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                            }
+                    }
+            }
+        } else {
+            /*
+             * Current KinoGer movie markup:
+             *
+             * <div class="player-mirrors">
+             *   <span data-link="...">Sirius</span>
+             *   <span data-link="...">Polaris</span>
+             *   <span data-link="...">Vega</span>
+             *   <span data-link="...">Orion</span>
+             * </div>
+             *
+             * Do not scan arbitrary anchors/iframes from the whole page.
+             */
+            doc.select(
+                ".player-mirrors span[data-link], " +
+                    ".player-mirrors [data-link]"
+            )
+                .forEach { element ->
+
+                    if (
+                        element.hasClass("youtube")
+                    ) {
+                        return@forEach
+                    }
+
+                    val name =
+                        element
+                            .text()
+                            .replace(
+                                Regex("\\s+"),
+                                " ",
+                            )
+                            .trim()
+
+                    addServer(
+                        name = name,
+                        rawUrl =
+                            element
+                                .attr("data-link")
+                                .trim(),
+                    )
+                }
+
+            /*
+             * Backward compatibility with KinoGer's older show(...) markup.
+             */
+            if (servers.isEmpty()) {
+                Regex(
+                    """show[^>]*?\d+[^>]*?'(https?://[^']+)'""",
+                    setOf(
+                        RegexOption.IGNORE_CASE,
+                        RegexOption.DOT_MATCHES_ALL,
+                    ),
+                )
+                    .findAll(doc.html())
+                    .map {
+                        it.groupValues[1]
+                    }
+                    .forEach { url ->
+                        addServer(
+                            name = hostName(url),
+                            rawUrl = url,
+                        )
+                    }
             }
         }
 
-        return urls.mapIndexed { index, src ->
-            Video.Server(id = "kinoger-$index", name = hostName(src), src = src)
-        }
+        return servers
+            .values
+            .mapIndexed { index, (name, src) ->
+                Video.Server(
+                    id = "kinoger-$index",
+                    name = name,
+                    src = src,
+                )
+            }
     }
 
     override suspend fun getVideo(server: Video.Server): Video = Extractor.extract(server.src)
