@@ -1,8 +1,6 @@
 package com.streamflixreborn.streamflix.fragments.settings
 
-import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
@@ -30,7 +28,6 @@ import androidx.preference.SwitchPreferenceCompat
 import com.streamflixreborn.streamflix.BuildConfig
 import com.streamflixreborn.streamflix.R
 import com.streamflixreborn.streamflix.activities.main.MainMobileActivity
-import com.streamflixreborn.streamflix.activities.tools.QrScannerActivity
 import com.streamflixreborn.streamflix.backup.BackupRestoreManager
 import com.streamflixreborn.streamflix.backup.ProviderBackupContext
 import com.streamflixreborn.streamflix.database.AppDatabase
@@ -47,7 +44,6 @@ import com.streamflixreborn.streamflix.utils.AppLanguageManager
 import com.streamflixreborn.streamflix.utils.DnsResolver
 import com.streamflixreborn.streamflix.utils.ProviderChangeNotifier
 import com.streamflixreborn.streamflix.utils.ThemeManager
-import com.streamflixreborn.streamflix.utils.UserDataCache
 import com.streamflixreborn.streamflix.utils.UserPreferences
 import com.streamflixreborn.streamflix.utils.DomainRedirectChecker
 import kotlinx.coroutines.Dispatchers
@@ -115,35 +111,6 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
                 performBackupImport(it)
             }
         }
-    }
-
-    private val scanResolverQrLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) {
-            return@registerForActivityResult
-        }
-
-        val rawValue = result.data?.getStringExtra(QrScannerActivity.EXTRA_QR_VALUE).orEmpty()
-        val uri = rawValue
-            .takeIf { it.startsWith("streamflix://resolve") }
-            ?.let(Uri::parse)
-
-        if (uri == null) {
-            Toast.makeText(
-                requireContext(),
-                getString(R.string.settings_scan_resolver_invalid_qr),
-                Toast.LENGTH_SHORT
-            ).show()
-            return@registerForActivityResult
-        }
-
-        val intent = Intent(requireContext(), MainMobileActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            data = uri
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        startActivity(intent)
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -506,11 +473,6 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/streamflixreborn"))
                 startActivity(intent)
             }
-            true
-        }
-
-        findPreference<Preference>("p_scan_resolver_qr")?.setOnPreferenceClickListener {
-            scanResolverQrLauncher.launch(Intent(requireContext(), QrScannerActivity::class.java))
             true
         }
 

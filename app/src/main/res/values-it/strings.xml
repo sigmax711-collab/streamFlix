@@ -334,13 +334,11 @@
     <string name="settings_server_voe_title">Sottotitoli dei server disattivati di default</string>
     <string name="settings_server_voe_summary">Se attivo, i sottotitoli dei server VOE, Vidnest e Vidzy non saranno abilitati in automatico se sono disponibili e hanno il valore default true</string>
 
-
     <string name="settings_category_interface_title">Impostazioni interfaccia</string>
     <string name="settings_immersive_mode">Modalità Immersiva</string>
     <string name="settings_immersive_mode_summary">Nasconde le barre di stato e di navigazione</string>
     <string name="settings_immersive_mode_on">Attiva (Barre nascoste)</string>
     <string name="settings_immersive_mode_off">Disattivata (Barre visibili)</string>
-
 
     <string name="player_brightness">Luminosità</string>
     <string name="player_volume">Volume</string>
@@ -389,10 +387,7 @@
     <string name="player_settings_subdl_label">SubDL</string>
     <string name="settings_category_poseidon">Impostazioni Poseidonhd2</string>
     <string name="settings_category_poseidon_domain">Nome di dominio Poseidonhd2</string>
-    <string name="settings_scan_resolver_qr_title">Scansiona QR bypass TV</string>
-    <string name="settings_scan_resolver_qr_summary">Apri la fotocamera e scansiona il codice QR mostrato sulla TV</string>
-    <string name="settings_scan_resolver_invalid_qr">Questo codice QR non è un link di bypass StreamFlix.</string>
-    <string name="settings_scan_resolver_failed">Impossibile avviare lo scanner QR su questo dispositivo.</string>
+
     <string name="settings_category_provider_url_manual">Inserisci manualmente</string>
     <string name="player_skip_intro">Salta intro</string>
     <string name="voice_error_clear">Cancella cronologia ricerche</string>
@@ -451,7 +446,7 @@
     <string name="settings_parental_unlocked">Controllo genitori sbloccato.</string>
     <string name="settings_parental_tmdb_disable_blocked">Devi sbloccare il controllo genitori prima di disattivare TMDb.</string>
     <string name="settings_screen_content_summary">Accesso TMDb, controllo genitori e restrizioni sui contenuti</string>
-    <string name="settings_screen_network_summary">DNS, bypass TV e chiavi dei servizi sottotitoli</string>
+    <string name="settings_screen_network_summary">DNS e chiavi dei servizi sottotitoli</string>
     <string name="settings_provider_connection_title">Impostazioni per il provider corrente</string>
     <string name="settings_screen_provider_summary">Dominio principale, portale e opzioni di recupero specifiche del provider</string>
     <string name="settings_screen_provider_summary_with_name">Dominio, portale e opzioni di recupero specifiche per %1$s</string>
@@ -475,8 +470,7 @@
     <string name="settings_app_language_spanish">Spagnolo</string>
     <string name="settings_app_language_french">Francese</string>
     <string name="settings_app_language_italian">Italiano</string>
-    <string name="settings_scan_resolver_camera_permission_denied">L autorizzazione fotocamera e necessaria per scansionare il codice QR.</string>
-    <string name="settings_scan_resolver_camera_unavailable">Nessuna fotocamera disponibile su questo dispositivo.</string>
+
     <string name="backup_import_action">Importa</string>
     <string name="backup_delete_action">Elimina</string>
     <string name="backup_delete_confirm_title">Elimina backup</string>

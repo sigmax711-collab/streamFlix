@@ -1,22 +1,18 @@
 package com.streamflixreborn.streamflix.activities.main
 
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -26,7 +22,6 @@ import androidx.navigation.navOptions
 import androidx.navigation.ui.setupWithNavController
 import com.streamflixreborn.streamflix.BuildConfig
 import com.streamflixreborn.streamflix.R
-import com.streamflixreborn.streamflix.activities.tools.BypassWebViewActivity
 import com.streamflixreborn.streamflix.databinding.ActivityMainMobileBinding
 import com.streamflixreborn.streamflix.fragments.player.PlayerMobileFragment
 import com.streamflixreborn.streamflix.providers.Cine24hProvider
@@ -42,57 +37,14 @@ import com.streamflixreborn.streamflix.utils.ThemeManager
 import com.streamflixreborn.streamflix.utils.UserPreferences
 import com.streamflixreborn.streamflix.utils.getCurrentFragment
 import com.streamflixreborn.streamflix.providers.AnimeOnlineNinjaProvider
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import org.json.JSONObject
-import java.util.Base64
-import kotlin.coroutines.resume
 
 class MainMobileActivity : FragmentActivity() {
-
-    private companion object {
-        const val RESOLVER_TIMEOUT_MS = 12_000L
-    }
-
-    private data class ResolverPayload(
-        val url: String,
-    )
 
     private var _binding: ActivityMainMobileBinding? = null
     private val binding get() = _binding!!
 
     private val viewModel by viewModels<MainViewModel>()
-    private val resolverWebSocketClient by lazy { OkHttpClient() }
-    private val bypassWebViewLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val wsUrl = pendingWs
-            val token = pendingToken
-            val cookies =
-                result.data?.getStringExtra(BypassWebViewActivity.EXTRA_COOKIE_HEADER)?.trim()
-
-            clearResolverState()
-
-            if (result.resultCode != Activity.RESULT_OK || wsUrl.isNullOrBlank() || token.isNullOrBlank()) {
-                return@registerForActivityResult
-            }
-
-            lifecycleScope.launch {
-                sendWebSocketDone(wsUrl, token, cookies)
-                showPostBypassCloseDialog()
-            }
-        }
-
-    private var pendingWs: String? = null
-    private var pendingToken: String? = null
-
     private var updateAppDialog: UpdateAppMobileDialog? = null
 
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -247,26 +199,12 @@ class MainMobileActivity : FragmentActivity() {
             }
         })
 
-        if (savedInstanceState == null) {
-            handleIntent(intent)
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleIntent(intent)
     }
 
     override fun onDestroy() {
         dismissUpdateDialog()
         _binding = null
         super.onDestroy()
-    }
-
-    private fun clearResolverState() {
-        pendingWs = null
-        pendingToken = null
     }
 
     private fun showUpdateDialog(state: MainViewModel.State.SuccessCheckingUpdate) {
@@ -360,207 +298,6 @@ class MainMobileActivity : FragmentActivity() {
         } else {
             finishAffinity()
         }
-    }
-
-    private suspend fun requestResolverPayload(wsUrl: String, token: String): ResolverPayload? =
-        withContext(Dispatchers.IO) {
-            withTimeoutOrNull(RESOLVER_TIMEOUT_MS) {
-                suspendCancellableCoroutine { continuation ->
-                    val request = Request.Builder()
-                        .url(wsUrl)
-                        .build()
-
-                    val socket =
-                        resolverWebSocketClient.newWebSocket(request, object : WebSocketListener() {
-                            override fun onOpen(webSocket: WebSocket, response: Response) {
-                                Log.d("ResolverWS", "Connected -> requesting URL")
-                                webSocket.send("resolve:$token")
-                            }
-
-                            override fun onMessage(webSocket: WebSocket, text: String) {
-                                when {
-                                    text.startsWith("payload:") -> {
-                                        val payload = text.substringAfter("payload:").trim()
-                                        val parsed = runCatching {
-                                            val json = JSONObject(payload)
-                                            ResolverPayload(
-                                                url = json.optString("url"),
-                                            )
-                                        }.getOrNull()
-
-                                        if (continuation.isActive) {
-                                            continuation.resume(
-                                                parsed?.takeUnless {
-                                                    it.url.isBlank() || it.url.equals("null", ignoreCase = true)
-                                                }
-                                            )
-                                        }
-                                        webSocket.close(1000, null)
-                                    }
-
-                                    text.startsWith("url:") -> {
-                                        val url = text.substringAfter("url:").trim()
-                                        if (continuation.isActive) {
-                                            continuation.resume(
-                                                url.takeUnless {
-                                                    it.isEmpty() || it.equals("null", ignoreCase = true)
-                                                }?.let { ResolverPayload(url = it) }
-                                            )
-                                        }
-                                        webSocket.close(1000, null)
-                                    }
-
-                                    text.startsWith("error:") -> {
-                                        Log.e("ResolverWS", "Resolver returned error: $text")
-                                        if (continuation.isActive) {
-                                            continuation.resume(null)
-                                        }
-                                        webSocket.close(1000, null)
-                                    }
-                                }
-                            }
-
-                            override fun onFailure(
-                                webSocket: WebSocket,
-                                t: Throwable,
-                                response: Response?,
-                            ) {
-                                if (!continuation.isActive) {
-                                    Log.d("ResolverWS", "WS resolve cancelled or timed out")
-                                    return
-                                }
-                                Log.e("ResolverWS", "WS resolve failed", t)
-                                continuation.resume(null)
-                            }
-                        })
-
-                    continuation.invokeOnCancellation {
-                        socket.cancel()
-                    }
-                }
-            }
-        }
-
-    private suspend fun sendWebSocketDone(wsUrl: String, token: String, cookies: String?) {
-        withContext(Dispatchers.IO) {
-            withTimeoutOrNull(RESOLVER_TIMEOUT_MS) {
-                suspendCancellableCoroutine { continuation ->
-                    val request = Request.Builder()
-                        .url(wsUrl)
-                        .build()
-
-                    val socket =
-                        resolverWebSocketClient.newWebSocket(request, object : WebSocketListener() {
-                            override fun onOpen(webSocket: WebSocket, response: Response) {
-                                Log.d("ResolverWS", "Connected -> sending DONE")
-                                val encodedCookies = cookies
-                                    ?.takeIf { it.isNotBlank() }
-                                    ?.let {
-                                        Base64.getEncoder().encodeToString(
-                                            it.toByteArray(Charsets.UTF_8)
-                                        )
-                                    }
-                                val message = if (encodedCookies.isNullOrBlank()) {
-                                    "done:$token"
-                                } else {
-                                    "done:$token:$encodedCookies"
-                                }
-                                webSocket.send(message)
-                            }
-
-                            override fun onMessage(webSocket: WebSocket, text: String) {
-                                if (text == "ack:$token" && continuation.isActive) {
-                                    continuation.resume(Unit)
-                                    webSocket.close(1000, null)
-                                }
-                            }
-
-                            override fun onFailure(
-                                webSocket: WebSocket,
-                                t: Throwable,
-                                response: Response?,
-                            ) {
-                                if (!continuation.isActive) {
-                                    Log.d("ResolverWS", "WS done cancelled or timed out")
-                                    return
-                                }
-                                Log.e("ResolverWS", "WS failed", t)
-                                continuation.resume(Unit)
-                            }
-                        })
-
-                    continuation.invokeOnCancellation {
-                        socket.cancel()
-                    }
-                }
-            }
-        }
-    }
-
-    private fun handleIntent(intent: Intent): Boolean {
-        val data = intent.data ?: return false
-
-        if (data.scheme == "streamflix" && data.host == "resolve") {
-            val ws = data.getQueryParameter("ws") ?: return false
-            val token = data.getQueryParameter("token") ?: return false
-
-            Log.d("ResolverWS", "WS: $ws")
-
-            resolve(ws, token)
-            return true
-        }
-
-        return false
-    }
-
-    private fun resolve(ws: String, token: String) {
-        pendingWs = ws
-        pendingToken = token
-
-        lifecycleScope.launch {
-            val payload = requestResolverPayload(ws, token)
-            if (payload == null) {
-                showResolverConnectionErrorDialog(ws, token)
-                return@launch
-            }
-
-            bypassWebViewLauncher.launch(
-                Intent(this@MainMobileActivity, BypassWebViewActivity::class.java)
-                    .putExtra(BypassWebViewActivity.EXTRA_URL, payload.url)
-            )
-        }
-    }
-
-    private fun showResolverConnectionErrorDialog(ws: String, token: String) {
-        if (isFinishing || isDestroyed) return
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(R.string.app_name)
-            .setMessage("Unable to reach the TV bypass websocket. Retry?")
-            .setPositiveButton("Retry") { _, _ ->
-                resolve(ws, token)
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ ->
-                clearResolverState()
-            }
-            .setOnCancelListener {
-                clearResolverState()
-            }
-            .show()
-    }
-
-    private fun showPostBypassCloseDialog() {
-        if (isFinishing || isDestroyed) return
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(R.string.app_name)
-            .setMessage("Bypass completed. Do you want to close the app?")
-            .setPositiveButton("Close app") { _, _ ->
-                closeTask()
-            }
-            .setNegativeButton("Keep open", null)
-            .setOnCancelListener(null)
-            .show()
     }
 
     override fun onUserLeaveHint() {
