@@ -20,6 +20,7 @@ abstract class Extractor {
 
     companion object {
         private val extractors = listOf(
+            FirestreamExtractor(),
             JKPlayerExtractor(),
             RabbitstreamExtractor(),
             RabbitstreamExtractor.MegacloudExtractor(),
