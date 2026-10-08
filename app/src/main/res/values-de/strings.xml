@@ -525,6 +525,7 @@
     <string name="tmdb_category_hulu">Beliebt bei Hulu</string>
     <string name="tmdb_category_apple">Beliebt bei Apple TV+</string>
     <string name="tmdb_category_hbo">Beliebt bei HBO</string>
+    <string name="settings_enable_recently_watched_title">Zeige Kürzlich gesehen auf Startseite</string>
     <string name="settings_enable_recently_watched_summary">Zeigt die Liste der zuletzt angesehenen Filme und Serien auf der Startseite an.</string>
     <string name="settings_clear_recently_watched_title">Zuletzt angesehenen Verlauf löschen</string>
     <string name="settings_clear_recently_watched_summary">Entfernt alle gespeicherten Elemente aus der Liste der zuletzt angesehenen Titel.</string>
