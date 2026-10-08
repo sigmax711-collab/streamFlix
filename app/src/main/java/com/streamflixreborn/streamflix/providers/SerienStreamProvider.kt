@@ -85,7 +85,7 @@ object SerienStreamProvider : Provider {
     fun initialize(context: Context) {
         appContext = context.applicationContext
         if (webViewResolver == null) {
-            webViewResolver = WebViewResolver(appContext, requireTvConfirmation = true)
+            webViewResolver = WebViewResolver(appContext, waitForManualContinue = true)
         }
         if (tvShowDao == null) {
             tvShowDao = SerienStreamDatabase.getInstance(context).tvShowDao()
@@ -93,7 +93,7 @@ object SerienStreamProvider : Provider {
     }
 
     private fun getWebViewResolver(): WebViewResolver {
-        return webViewResolver ?: WebViewResolver(appContext, requireTvConfirmation = true)
+        return webViewResolver ?: WebViewResolver(appContext, waitForManualContinue = true)
             .also { webViewResolver = it }
     }
 

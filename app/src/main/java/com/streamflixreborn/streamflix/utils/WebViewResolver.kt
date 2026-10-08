@@ -39,7 +39,7 @@ import kotlin.coroutines.resume
 
 class WebViewResolver(
     private val context: Context,
-    requireTvConfirmation: Boolean = false,
+    waitForManualContinue: Boolean = false,
 ) {
 
     private companion object {
@@ -115,8 +115,10 @@ class WebViewResolver(
     private var loginKeyboardPrimed = false
     private var deferredLoadUrl: String? = null
     private var deferredLoadHeaders: Map<String, String> = emptyMap()
+    private var lastMobileZoomUrl: String? = null
     private val isTv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-    private val requiresConfirmation = isTv && requireTvConfirmation
+    private val waitForManualContinue = waitForManualContinue
+    private val requiresConfirmation = isTv && waitForManualContinue
     private var continueButton: Button? = null
     private val activityContext: Activity?
         get() = context.findActivity() ?: StreamFlixApp.currentActivity
@@ -174,7 +176,7 @@ class WebViewResolver(
             }
         }
         // A user-controlled captcha session must remain open until Continue or Back.
-        val result = if (requiresConfirmation) resolve() else withTimeoutOrNull(120000) { resolve() }
+        val result = if (waitForManualContinue) resolve() else withTimeoutOrNull(120000) { resolve() }
         if (result == null) Log.e(TAG, "[WebView] Global Timeout for $url")
         return@withLock result ?: Result(
             html = "<html><body>Timeout</body></html>",
@@ -298,7 +300,11 @@ class WebViewResolver(
                 override fun onPageFinished(view: WebView?, currentUrl: String?) {
                     Log.d(TAG, "[WebView] onPageFinished: $currentUrl")
                     view?.evaluateJavascript(POPUP_BLOCKER_SCRIPT, null)
-                    applyPageZoom(view)
+                    if (requiresConfirmation) {
+                        applyPageZoom(view)
+                    } else {
+                        applyMobilePageZoomOnce(view, currentUrl)
+                    }
                     mainHandler.postDelayed({
                         if (webView != null) {
                             checkChallengeStatus(
@@ -316,7 +322,7 @@ class WebViewResolver(
         }
         Log.d(TAG, "[WebView] Opened")
 
-        if ((showImmediately || requiresConfirmation) && activityContext != null) {
+        if ((showImmediately || waitForManualContinue) && activityContext != null) {
             deferredLoadUrl = url
             deferredLoadHeaders = headers
             showVisibleChallenge(continuation, valueScript)
@@ -329,6 +335,24 @@ class WebViewResolver(
         if (view == null || view !== webView) return
         // Cloudflare can replace the document without changing its URL. A new
         // WebView can also revisit that URL, so zoom must not be cached by URL.
+        view.evaluateJavascript(
+            """
+                (function() {
+                    const zoom = '$PAGE_ZOOM';
+                    document.documentElement.style.zoom = zoom;
+                    if (document.body) {
+                        document.body.style.zoom = zoom;
+                    }
+                    return zoom;
+                })();
+            """.trimIndent(),
+            null
+        )
+    }
+
+    private fun applyMobilePageZoomOnce(view: WebView?, currentUrl: String?) {
+        if (view == null || currentUrl.isNullOrBlank() || lastMobileZoomUrl == currentUrl) return
+        lastMobileZoomUrl = currentUrl
         view.evaluateJavascript(
             """
                 (function() {
@@ -449,7 +473,7 @@ class WebViewResolver(
             )
 
             // Se rileviamo sblocco, chiudiamo tutto subito
-            if (success && !requiresConfirmation) {
+            if (success && !waitForManualContinue) {
                 Log.d(TAG, "[WebView] SUCCESS detected! Closing bypass.")
                 cookieManager.flush()
                 if (continuation.isActive) {
@@ -478,7 +502,7 @@ class WebViewResolver(
                 }, 2000)
             } else {
                 Log.w(TAG, "[WebView] Max polling reached")
-                if (continuation.isActive && !requiresConfirmation) {
+                if (continuation.isActive && !waitForManualContinue) {
                     finalizeResult(view, cleanHtml, currentUrl, cookies, valueScript, continuation)
                 }
             }
@@ -593,6 +617,33 @@ class WebViewResolver(
                     isFocusableInTouchMode = isTv
                 }
 
+                if (waitForManualContinue) {
+                    continueButton = Button(uiContext).apply {
+                        id = View.generateViewId()
+                        text = context.getString(R.string.bypass_action_continue)
+                        isFocusable = false
+                        setOnClickListener {
+                            val view = webView ?: return@setOnClickListener
+                            view.evaluateJavascript("document.documentElement.innerHTML") { html ->
+                                if (continuation.isActive) {
+                                    val currentUrl = view.url
+                                    val cookieManager = CookieManager.getInstance()
+                                    val cookies = currentUrl?.let(cookieManager::getCookie).orEmpty()
+                                    cookieManager.flush()
+                                    finalizeResult(
+                                        view,
+                                        decodeJavascriptValue(html).orEmpty(),
+                                        currentUrl,
+                                        cookies,
+                                        valueScript,
+                                        continuation,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (isTv) {
                     val btnInfo = Button(uiContext).apply {
                         id = View.generateViewId()
@@ -607,34 +658,10 @@ class WebViewResolver(
                     infoParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
                     rootContainer.addView(btnInfo, infoParams)
 
-                    if (requiresConfirmation) {
-                        continueButton = Button(uiContext).apply {
-                            id = View.generateViewId()
-                            text = context.getString(R.string.bypass_action_continue)
-                            isFocusable = false
-                            setOnClickListener {
-                                val view = webView ?: return@setOnClickListener
-                                view.evaluateJavascript("document.documentElement.innerHTML") { html ->
-                                    if (continuation.isActive) {
-                                        val currentUrl = view.url
-                                        val cookieManager = CookieManager.getInstance()
-                                        val cookies = currentUrl?.let(cookieManager::getCookie).orEmpty()
-                                        cookieManager.flush()
-                                        finalizeResult(
-                                            view,
-                                            decodeJavascriptValue(html).orEmpty(),
-                                            currentUrl,
-                                            cookies,
-                                            valueScript,
-                                            continuation,
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                    continueButton?.let {
                         val buttonParams = RelativeLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT)
                         buttonParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-                        rootContainer.addView(continueButton, buttonParams)
+                        rootContainer.addView(it, buttonParams)
                     }
 
                     val webContainer = FrameLayout(uiContext).apply {
@@ -659,7 +686,14 @@ class WebViewResolver(
                 } else {
                     // Mobile: Solo WebView a tutto schermo
                     (webView?.parent as? ViewGroup)?.removeView(webView)
-                    rootContainer.addView(webView, RelativeLayout.LayoutParams(-1, -1))
+                    val webParams = RelativeLayout.LayoutParams(-1, -1)
+                    continueButton?.let {
+                        val buttonParams = RelativeLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT)
+                        buttonParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                        rootContainer.addView(it, buttonParams)
+                        webParams.addRule(RelativeLayout.ABOVE, it.id)
+                    }
+                    rootContainer.addView(webView, webParams)
                 }
 
                 dialog = AlertDialog.Builder(uiContext, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
@@ -709,10 +743,18 @@ class WebViewResolver(
                     deferredLoadUrl = null
                     deferredLoadHeaders = emptyMap()
                     val pendingView = webView
-                    pendingView?.doOnLayout {
-                        if (continuation.isActive && webView === pendingView) {
-                            Log.d(TAG, "[WebView] Loading after layout: ${pendingView.width}x${pendingView.height}")
-                            pendingView.loadUrl(pendingUrl, pendingHeaders)
+                    if (requiresConfirmation) {
+                        pendingView?.doOnLayout {
+                            if (continuation.isActive && webView === pendingView) {
+                                Log.d(TAG, "[WebView] Loading after layout: ${pendingView.width}x${pendingView.height}")
+                                pendingView.loadUrl(pendingUrl, pendingHeaders)
+                            }
+                        }
+                    } else {
+                        pendingView?.post {
+                            if (continuation.isActive && webView === pendingView) {
+                                pendingView.loadUrl(pendingUrl, pendingHeaders)
+                            }
                         }
                     }
                 }
