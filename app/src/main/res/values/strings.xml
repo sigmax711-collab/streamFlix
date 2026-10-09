@@ -287,13 +287,8 @@
     <string name="settings_section_content_title">Content and Safety</string>
     <string name="settings_screen_content_summary">TMDb access, parental control and content restrictions</string>
     <string name="settings_category_network_title">Connection &amp; Services</string>
-    <string name="settings_screen_network_summary">DNS, TV bypass tools and subtitle service keys</string>
-    <string name="settings_scan_resolver_qr_title">Scan TV bypass QR</string>
-    <string name="settings_scan_resolver_qr_summary">Open the camera and scan the QR code shown on TV</string>
-    <string name="settings_scan_resolver_invalid_qr">This QR code is not a StreamFlix bypass link.</string>
-    <string name="settings_scan_resolver_failed">Unable to start QR scanner on this device.</string>
-    <string name="settings_scan_resolver_camera_permission_denied">Camera permission is required to scan the QR code.</string>
-    <string name="settings_scan_resolver_camera_unavailable">No camera is available on this device.</string>
+    <string name="settings_screen_network_summary">DNS and subtitle service keys</string>
+
     <string name="settings_category_provider_title">Provider settings</string>
     <string name="settings_provider_connection_title">Settings for current provider</string>
     <string name="settings_screen_provider_summary">Main domain, portal and provider-specific recovery options</string>
@@ -473,7 +468,6 @@
     <string name="settings_immersive_mode_summary">Hide status and navigation bars</string>
     <string name="settings_immersive_mode_on">On (Bars hidden)</string>
     <string name="settings_immersive_mode_off">Off (Bars visible)</string>
-
 
     <string name="player_brightness">Brightness</string>
     <string name="player_volume">Volume</string>

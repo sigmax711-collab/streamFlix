@@ -95,6 +95,8 @@ class BypassWebViewActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            continueButton.isEnabled = false
+            CookieManager.getInstance().flush()
             setResult(
                 Activity.RESULT_OK,
                 Intent().putExtra(EXTRA_COOKIE_HEADER, cookies)
@@ -162,7 +164,8 @@ class BypassWebViewActivity : AppCompatActivity() {
                 val isMainFrame = request?.isForMainFrame ?: true
                 if (!isMainFrame || url.isBlank()) return false
 
-                if (isAllowedBypassHost(url)) {
+                val scheme = Uri.parse(url).scheme
+                if (scheme == "https" || scheme == "http") {
                     currentPageUrl = url
                     return false
                 }
@@ -224,14 +227,14 @@ class BypassWebViewActivity : AppCompatActivity() {
         val candidates = linkedSetOf<String>()
         val currentUrl = currentPageUrl
 
-        if (!currentUrl.isNullOrBlank()) {
-            candidates += currentUrl
-        }
         if (targetUrl.isNotBlank()) {
             candidates += targetUrl
         }
 
-        val host = runCatching { Uri.parse(currentUrl ?: targetUrl).host.orEmpty() }.getOrDefault("")
+        val host = runCatching { Uri.parse(targetUrl).host.orEmpty() }.getOrDefault("")
+        if (!currentUrl.isNullOrBlank() && Uri.parse(currentUrl).host.equals(host, ignoreCase = true)) {
+            candidates += currentUrl
+        }
         if (host.isNotBlank()) {
             candidates += "https://$host/"
             candidates += "http://$host/"
@@ -243,9 +246,4 @@ class BypassWebViewActivity : AppCompatActivity() {
             .orEmpty()
     }
 
-    private fun isAllowedBypassHost(url: String): Boolean {
-        val host = runCatching { Uri.parse(url).host.orEmpty() }.getOrDefault("")
-        return host.equals("serienstream.to", ignoreCase = true) ||
-            host.equals("challenges.cloudflare.com", ignoreCase = true)
-    }
 }

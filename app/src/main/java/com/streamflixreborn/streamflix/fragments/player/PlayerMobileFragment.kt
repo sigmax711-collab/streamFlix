@@ -137,6 +137,7 @@ class PlayerMobileFragment : Fragment() {
     private var isIgnoringPip = false
     private var waitingForBypass = false
     private var bypassDone = false
+    private var pendingBypassUrl: String? = null
     private var nextEpisodePrefetchTargetId: String? = null
     private var nextEpisodePrefetchJob: Job? = null
     private var nextEpisodeOverlayDismissed = false
@@ -148,10 +149,12 @@ class PlayerMobileFragment : Fragment() {
 
             if (result.resultCode != android.app.Activity.RESULT_OK || cookies.isNullOrBlank()) {
                 waitingForBypass = false
+                pendingBypassUrl = null
                 return@registerForActivityResult
             }
 
-            val bypassUrl = servers.firstOrNull { isSerienStreamBypassUrl(it.id) }?.id
+            val bypassUrl = pendingBypassUrl ?: servers.firstOrNull { isSerienStreamBypassUrl(it.id) }?.id
+            pendingBypassUrl = null
             if (bypassUrl.isNullOrBlank()) {
                 waitingForBypass = false
                 return@registerForActivityResult
@@ -267,6 +270,20 @@ class PlayerMobileFragment : Fragment() {
         } catch (ignored: Exception) {}
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        waitingForBypass = savedInstanceState?.getBoolean("waitingForBypass") ?: false
+        bypassDone = savedInstanceState?.getBoolean("bypassDone") ?: false
+        pendingBypassUrl = savedInstanceState?.getString("pendingBypassUrl")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("waitingForBypass", waitingForBypass)
+        outState.putBoolean("bypassDone", bypassDone)
+        outState.putString("pendingBypassUrl", pendingBypassUrl)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initializePlayer(false)
@@ -289,6 +306,7 @@ class PlayerMobileFragment : Fragment() {
                     PlayerViewModel.State.LoadingServers -> {}
                     is PlayerViewModel.State.SuccessLoadingServers -> {
                         servers = state.servers
+                        if (waitingForBypass) return@collect
                         val sToServer = servers.firstOrNull {
                             isSerienStreamBypassUrl(it.id)
                         }
@@ -302,6 +320,7 @@ class PlayerMobileFragment : Fragment() {
                             }
 
                             waitingForBypass = true
+                            pendingBypassUrl = sToServer.id
                             bypassWebViewLauncher.launch(
                                 Intent(requireContext(), BypassWebViewActivity::class.java)
                                     .putExtra(BypassWebViewActivity.EXTRA_URL, bypassUrl)

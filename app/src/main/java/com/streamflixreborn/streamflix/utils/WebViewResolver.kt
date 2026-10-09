@@ -26,6 +26,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.RelativeLayout
 import androidx.core.view.doOnLayout
+import com.streamflixreborn.streamflix.BuildConfig
 import com.streamflixreborn.streamflix.R
 import com.streamflixreborn.streamflix.StreamFlixApp
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -115,7 +116,10 @@ class WebViewResolver(
     private var loginKeyboardPrimed = false
     private var deferredLoadUrl: String? = null
     private var deferredLoadHeaders: Map<String, String> = emptyMap()
-    private val isTv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    private var cookieUrl: String? = null
+    private val isTv = BuildConfig.APP_LAYOUT == "tv" ||
+            (BuildConfig.APP_LAYOUT != "mobile" &&
+                    context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
     private val requiresConfirmation = isTv && requireTvConfirmation
     private var continueButton: Button? = null
     private val activityContext: Activity?
@@ -159,6 +163,7 @@ class WebViewResolver(
         val resolve: suspend () -> Result = {
             suspendCancellableCoroutine { continuation ->
                 mainHandler.post {
+                    if (!continuation.isActive) return@post
                     setupWebView(
                         url,
                         headers,
@@ -193,6 +198,7 @@ class WebViewResolver(
         showImmediately: Boolean,
         continuation: kotlinx.coroutines.CancellableContinuation<Result>
     ) {
+        cookieUrl = url
         webView = WebView(context).apply {
             setBackgroundColor(Color.WHITE)
             // IMPORTANTE: Su TV non deve essere focusable per lasciare il controllo al container
@@ -417,13 +423,14 @@ class WebViewResolver(
         valueScript: String? = null,
         pageReadyScriptProvider: ((currentUrl: String, html: String, cookies: String) -> String?)? = null,
     ) {
-        if (continuation.isCompleted || webView == null) return
+        if (!continuation.isActive || view == null || view !== webView) return
 
         val cookieManager = CookieManager.getInstance()
         val cookies = cookieManager.getCookie(currentUrl) ?: ""
         val hasClearance = cookies.contains("cf_clearance")
 
         view?.evaluateJavascript("(function() { return document.documentElement.innerHTML; })();") { html ->
+            if (!continuation.isActive || view !== webView) return@evaluateJavascript
             val cleanHtml = decodeJavascriptValue(html).orEmpty()
 
             val isChallenge = challengeKeywords.any { cleanHtml.contains(it, ignoreCase = true) }
@@ -493,7 +500,9 @@ class WebViewResolver(
         valueScript: String?,
         continuation: kotlinx.coroutines.CancellableContinuation<Result>,
     ) {
+        if (!continuation.isActive || view !== webView) return
         if (valueScript.isNullOrBlank() || view == null) {
+            cleanup()
             continuation.resume(
                 Result(
                     html = "<html>$html</html>",
@@ -501,12 +510,12 @@ class WebViewResolver(
                     cookies = cookies,
                 )
             )
-            cleanup()
             return
         }
 
         view.evaluateJavascript(valueScript) { evaluated ->
-            if (continuation.isActive) {
+            if (continuation.isActive && view === webView) {
+                cleanup()
                 continuation.resume(
                     Result(
                         html = "<html>$html</html>",
@@ -516,7 +525,6 @@ class WebViewResolver(
                     )
                 )
             }
-            cleanup()
         }
     }
 
@@ -534,7 +542,9 @@ class WebViewResolver(
         valueScript: String? = null,
     ) {
         if (dialog != null || webView == null) return
+        val challengeView = webView
         mainHandler.post {
+            if (!continuation.isActive || webView !== challengeView || dialog != null) return@post
             try {
                 val uiContext = activityContext ?: return@post
                 // CONTAINER TV: Intercetta i tasti globalmente (Soluzione "Meravigliosa")
@@ -593,6 +603,34 @@ class WebViewResolver(
                     isFocusableInTouchMode = isTv
                 }
 
+                if (requiresConfirmation) {
+                    continueButton = Button(uiContext).apply {
+                        id = View.generateViewId()
+                        text = context.getString(R.string.bypass_action_continue)
+                        isFocusable = false
+                        setOnClickListener {
+                            isEnabled = false
+                            val view = webView ?: return@setOnClickListener
+                            view.evaluateJavascript("document.documentElement.innerHTML") { html ->
+                                if (continuation.isActive) {
+                                    val currentUrl = view.url
+                                    val cookieManager = CookieManager.getInstance()
+                                    val cookies = cookieUrl?.let(cookieManager::getCookie).orEmpty()
+                                    cookieManager.flush()
+                                    finalizeResult(
+                                        view,
+                                        decodeJavascriptValue(html).orEmpty(),
+                                        currentUrl,
+                                        cookies,
+                                        valueScript,
+                                        continuation,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (isTv) {
                     val btnInfo = Button(uiContext).apply {
                         id = View.generateViewId()
@@ -607,34 +645,10 @@ class WebViewResolver(
                     infoParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
                     rootContainer.addView(btnInfo, infoParams)
 
-                    if (requiresConfirmation) {
-                        continueButton = Button(uiContext).apply {
-                            id = View.generateViewId()
-                            text = context.getString(R.string.bypass_action_continue)
-                            isFocusable = false
-                            setOnClickListener {
-                                val view = webView ?: return@setOnClickListener
-                                view.evaluateJavascript("document.documentElement.innerHTML") { html ->
-                                    if (continuation.isActive) {
-                                        val currentUrl = view.url
-                                        val cookieManager = CookieManager.getInstance()
-                                        val cookies = currentUrl?.let(cookieManager::getCookie).orEmpty()
-                                        cookieManager.flush()
-                                        finalizeResult(
-                                            view,
-                                            decodeJavascriptValue(html).orEmpty(),
-                                            currentUrl,
-                                            cookies,
-                                            valueScript,
-                                            continuation,
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                    continueButton?.let {
                         val buttonParams = RelativeLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT)
                         buttonParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-                        rootContainer.addView(continueButton, buttonParams)
+                        rootContainer.addView(it, buttonParams)
                     }
 
                     val webContainer = FrameLayout(uiContext).apply {
@@ -709,16 +723,25 @@ class WebViewResolver(
                     deferredLoadUrl = null
                     deferredLoadHeaders = emptyMap()
                     val pendingView = webView
-                    pendingView?.doOnLayout {
-                        if (continuation.isActive && webView === pendingView) {
-                            Log.d(TAG, "[WebView] Loading after layout: ${pendingView.width}x${pendingView.height}")
-                            pendingView.loadUrl(pendingUrl, pendingHeaders)
+                    if (requiresConfirmation) {
+                        pendingView?.doOnLayout {
+                            if (continuation.isActive && webView === pendingView) {
+                                Log.d(TAG, "[WebView] Loading after layout: ${pendingView.width}x${pendingView.height}")
+                                pendingView.loadUrl(pendingUrl, pendingHeaders)
+                            }
+                        }
+                    } else {
+                        pendingView?.post {
+                            if (continuation.isActive && webView === pendingView) {
+                                pendingView.loadUrl(pendingUrl, pendingHeaders)
+                            }
                         }
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "[WebView] CRITICAL UI ERROR", e)
                 cleanup()
+                continuation.cancel(e)
             }
         }
     }
@@ -834,19 +857,21 @@ class WebViewResolver(
 
     private fun cleanup() {
         val action: () -> Unit = {
-            try {
-                deferredLoadUrl = null
-                deferredLoadHeaders = emptyMap()
-                dialog?.dismiss()
-                dialog = null
-                webView?.stopLoading()
-                webView?.destroy()
-                webView = null
-                virtualCursor = null
-                continueButton = null
-                Log.d(TAG, "[WebView] Closed")
-            } catch (e: Exception) {
-            }
+            val oldDialog = dialog
+            val oldWebView = webView
+            dialog = null
+            webView = null
+            deferredLoadUrl = null
+            deferredLoadHeaders = emptyMap()
+            cookieUrl = null
+            virtualCursor = null
+            continueButton = null
+            runCatching { oldDialog?.dismiss() }
+                .onFailure { Log.w(TAG, "[WebView] Unable to dismiss dialog", it) }
+            runCatching { oldWebView?.stopLoading() }
+            runCatching { (oldWebView?.parent as? ViewGroup)?.removeView(oldWebView) }
+            runCatching { oldWebView?.destroy() }
+            Log.d(TAG, "[WebView] Closed")
         }
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
