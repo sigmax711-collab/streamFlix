@@ -757,26 +757,58 @@ class TmdbProvider(override val language: String) : Provider {
                 // German TMDb sources:
                 // keep the existing extractors and additionally search
                 // supported native German providers.
-                servers.addAll(0, MoflixExtractor().servers(videoType))
-
-                val nativeGermanServers = coroutineScope {
-                    germanTmdbProviders(videoType).map { candidate ->
+                /*
+                 * MOFLIX_TMDB_NONBLOCKING_V1
+                 *
+                 * Moflix can spend time in its anti-bot/session path.
+                 * Run it in parallel with the native German providers so
+                 * it can never hold the whole TMDb-DE source list hostage.
+                 */
+                val discoveredGermanServers = coroutineScope {
+                    val moflixTask =
                         async(Dispatchers.IO) {
-                            runCatching {
-                                findGermanProviderServers(candidate, videoType)
-                            }.getOrElse { error ->
+                            val result =
+                                withTimeoutOrNull(10_000L) {
+                                    MoflixExtractor()
+                                        .servers(videoType)
+                                }
+
+                            if (result == null) {
                                 Log.w(
                                     "TmdbProvider",
-                                    "TMDB-DE ${candidate.label} failed",
-                                    error
+                                    "Moflix discovery timed out after 10000ms"
                                 )
-                                emptyList()
                             }
+
+                            result.orEmpty()
                         }
-                    }.awaitAll().flatten()
+
+                    val nativeTasks =
+                        germanTmdbProviders(videoType)
+                            .map { candidate ->
+                                async(Dispatchers.IO) {
+                                    runCatching {
+                                        findGermanProviderServers(
+                                            candidate,
+                                            videoType
+                                        )
+                                    }.getOrElse { error ->
+                                        Log.w(
+                                            "TmdbProvider",
+                                            "TMDB-DE ${candidate.label} failed",
+                                            error
+                                        )
+                                        emptyList()
+                                    }
+                                }
+                            }
+
+                    (listOf(moflixTask) + nativeTasks)
+                        .awaitAll()
+                        .flatten()
                 }
 
-                servers.addAll(nativeGermanServers)
+                servers.addAll(discoveredGermanServers)
 
                 if (videoType is Video.Type.Movie) {
                     servers.add(EinschaltenExtractor().server(videoType))
@@ -965,13 +997,6 @@ class TmdbProvider(override val language: String) : Provider {
                 FilmPalastProvider,
                 movies = true,
                 tvShows = true,
-            ),
-            GermanTmdbProvider(
-                "kellerkino",
-                "KellerKino",
-                KellerKinoProvider,
-                movies = true,
-                tvShows = false,
             ),
             GermanTmdbProvider(
                 "serienstream",
