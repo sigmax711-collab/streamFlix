@@ -527,4 +527,9 @@
     <string name="settings_clear_recently_watched_summary">Entfernt alle gespeicherten Elemente aus der Liste der zuletzt angesehenen Titel.</string>
     <string name="settings_clear_recently_watched_dialog_message">Möchtest du deinen gesamten Verlauf der zuletzt angesehenen Titel wirklich löschen?</string>
     <string name="settings_clear_recently_watched_done">Zuletzt angesehener Verlauf gelöscht.</string>
+
+    <!-- VAVOO_DOMAIN_ROTATION_V1 -->
+    <string name="settings_vavoo_domain_next">Weiter</string>
+    <string name="settings_vavoo_domain_next_summary">Nächste bekannte Vavoo-Domain prüfen und die erste erreichbare übernehmen</string>
+    <string name="settings_vavoo_domain_next_updated">Vavoo-Domain übernommen: %1$s</string>
 </resources>

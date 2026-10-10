@@ -621,4 +621,9 @@
     <string name="settings_provider_domain_check_current">Domain is already current</string>
     <string name="settings_provider_domain_check_updated">New domain saved: %1$s</string>
     <string name="settings_provider_domain_check_failed">Domain check failed: %1$s</string>
+
+    <!-- VAVOO_DOMAIN_ROTATION_V1 -->
+    <string name="settings_vavoo_domain_next">Next Vavoo domain</string>
+    <string name="settings_vavoo_domain_next_summary">Try the next known Vavoo domain and save the first reachable one</string>
+    <string name="settings_vavoo_domain_next_updated">Vavoo domain changed to: %1$s</string>
 </resources>

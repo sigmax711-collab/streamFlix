@@ -1,5 +1,7 @@
 package com.streamflixreborn.streamflix.providers
 
+import com.streamflixreborn.streamflix.utils.UserPreferences
+
 import android.util.Log
 import com.streamflixreborn.streamflix.adapters.AppAdapter
 import com.streamflixreborn.streamflix.extractors.Extractor
@@ -23,9 +25,13 @@ import java.util.concurrent.TimeUnit
 
 object VavooConfig {
     const val DEFAULT_BASE_URL = "https://vavoo.to/"
+    const val SETTINGS_KEY = "Vavoo"
 
     fun baseUrl(): String =
-        DEFAULT_BASE_URL
+        UserPreferences.resolveProviderBaseUrl(
+            SETTINGS_KEY,
+            DEFAULT_BASE_URL,
+        )
 }
 
 class VavooVodProvider private constructor(
