@@ -21,7 +21,6 @@ import com.streamflixreborn.streamflix.utils.UserDataCache.toCached
 import com.streamflixreborn.streamflix.utils.UserDataCache.toEpisode
 import com.streamflixreborn.streamflix.utils.UserDataCache.toMovie
 import com.streamflixreborn.streamflix.utils.UserPreferences
-import com.streamflixreborn.streamflix.utils.combine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -155,8 +154,8 @@ class HomeViewModel : ViewModel() {
 
             // RECENTLY WATCHED - Recorded immediately when playback starts.
             combine(
-                database.movieDao().getRecentlyWatched(),
-                database.tvShowDao().getRecentlyWatched(),
+                db().movieDao().getRecentlyWatched(),
+                db().tvShowDao().getRecentlyWatched(),
                 UserPreferences.recentlyWatchedEnabledFlow,
             ) { movies, tvShows, enabled ->
                 if (!enabled) {
