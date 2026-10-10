@@ -54,6 +54,7 @@ abstract class Extractor {
             MoviesapiExtractor(),
             CloseloadExtractor(),
             LuluVdoExtractor(),
+            FastreamExtractor(),
             DoodLaExtractor(),
             DoodLaExtractor.DoodLiExtractor(),
             VidPlyExtractor(),

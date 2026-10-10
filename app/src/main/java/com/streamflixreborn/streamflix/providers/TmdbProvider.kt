@@ -40,6 +40,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import kotlinx.coroutines.withTimeoutOrNull
 
 class TmdbProvider(override val language: String) : Provider {
     override val baseUrl: String
@@ -79,31 +80,33 @@ class TmdbProvider(override val language: String) : Provider {
             }
         }
 
-        val trendingDeferred = async {
+        val enabledCategories = UserPreferences.tmdbCategories
+
+        val trendingDeferred = if ("featured" in enabledCategories || "trending" in enabledCategories) async {
             awaitAll(
                 async { TMDb3.Trending.all(TMDb3.Params.TimeWindow.DAY, page = 1, language = language) },
                 async { TMDb3.Trending.all(TMDb3.Params.TimeWindow.DAY, page = 2, language = language) },
                 async { TMDb3.Trending.all(TMDb3.Params.TimeWindow.DAY, page = 3, language = language) },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val popularMoviesDeferred = async {
+        val popularMoviesDeferred = if ("popular_movies" in enabledCategories) async {
             awaitAll(
                 async { TMDb3.MovieLists.popular(page = 1, language = language) },
                 async { TMDb3.MovieLists.popular(page = 2, language = language) },
                 async { TMDb3.MovieLists.popular(page = 3, language = language) },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val popularTvShowsDeferred = async {
+        val popularTvShowsDeferred = if ("popular_tv" in enabledCategories) async {
             awaitAll(
                 async { TMDb3.TvSeriesLists.popular(page = 1, language = language) },
                 async { TMDb3.TvSeriesLists.popular(page = 2, language = language) },
                 async { TMDb3.TvSeriesLists.popular(page = 3, language = language) },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val popularAnimeDeferred = async {
+        val popularAnimeDeferred = if ("popular_anime" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -120,9 +123,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val netflixDeferred = async {
+        val netflixDeferred = if ("netflix" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -138,9 +141,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val amazonDeferred = async {
+        val amazonDeferred = if ("amazon" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -156,9 +159,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val disneyDeferred = async {
+        val disneyDeferred = if ("disney" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -174,9 +177,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val huluDeferred = async {
+        val huluDeferred = if ("hulu" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -192,9 +195,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val appleDeferred = async {
+        val appleDeferred = if ("apple" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.movie(
@@ -210,9 +213,9 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
-        }
+        } else null
 
-        val hboDeferred = async {
+        val hboDeferred = if ("hbo" in enabledCategories) async {
             awaitAll(
                 async {
                     TMDb3.Discover.tv(
@@ -229,133 +232,156 @@ class TmdbProvider(override val language: String) : Provider {
                     )
                 },
             ).flatMap { it.results }
+        } else null
+
+        if (trendingDeferred != null) {
+            val trending = trendingDeferred.await()
+            if ("featured" in enabledCategories) {
+                categories.add(
+                    Category(
+                        name = Category.FEATURED,
+                        list = trending.safeSubList(0, 5).mapNotNull(mapMulti)
+                    )
+                )
+            }
+            if ("trending" in enabledCategories) {
+                categories.add(
+                    Category(
+                        name = getTranslation("Trending"),
+                        list = trending.safeSubList(5, trending.size).mapNotNull(mapMulti)
+                    )
+                )
+            }
         }
 
-        val trending = trendingDeferred.await()
-        categories.add(
-            Category(
-                name = Category.FEATURED,
-                list = trending.safeSubList(0, 5).mapNotNull(mapMulti)
+        popularMoviesDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular Movies"),
+                    list = it.mapNotNull(mapMulti)
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Trending"),
-                list = trending.safeSubList(5, trending.size).mapNotNull(mapMulti)
+        popularTvShowsDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular TV Shows"),
+                    list = it.mapNotNull(mapMulti)
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular Movies"),
-                list = popularMoviesDeferred.await().mapNotNull(mapMulti)
-            )
-        )
-
-        categories.add(
-            Category(
-                name = getTranslation("Popular TV Shows"),
-                list = popularTvShowsDeferred.await().mapNotNull(mapMulti)
-            )
-        )
-
-        categories.add(
-            Category(
-                name = getTranslation("Popular Anime"),
-                list = popularAnimeDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        popularAnimeDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular Anime"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Netflix"),
-                list = netflixDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        netflixDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Netflix"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Amazon"),
-                list = amazonDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        amazonDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Amazon"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Disney+"),
-                list = disneyDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        disneyDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Disney+"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Hulu"),
-                list = huluDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        huluDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Hulu"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on Apple TV+"),
-                list = appleDeferred.await()
-                    .sortedByDescending {
-                        when (it) {
-                            is TMDb3.Movie -> it.popularity
-                            is TMDb3.Person -> it.popularity
-                            is TMDb3.Tv -> it.popularity
+        appleDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on Apple TV+"),
+                    list = it
+                        .sortedByDescending {
+                            when (it) {
+                                is TMDb3.Movie -> it.popularity
+                                is TMDb3.Person -> it.popularity
+                                is TMDb3.Tv -> it.popularity
+                            }
                         }
-                    }
-                    .mapNotNull(mapMulti),
+                        .mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
-        categories.add(
-            Category(
-                name = getTranslation("Popular on HBO"),
-                list = hboDeferred.await().mapNotNull(mapMulti),
+        hboDeferred?.await()?.let {
+            categories.add(
+                Category(
+                    name = getTranslation("Popular on HBO"),
+                    list = it.mapNotNull(mapMulti),
+                )
             )
-        )
+        }
 
         categories
     }
@@ -728,12 +754,37 @@ class TmdbProvider(override val language: String) : Provider {
                 servers.add(VixSrcExtractor().server(videoType))
             }
             "de" -> {
-                // Solo server tedeschi
+                // German TMDb sources:
+                // keep the existing extractors and additionally search
+                // supported native German providers.
                 servers.addAll(0, MoflixExtractor().servers(videoType))
+
+                val nativeGermanServers = coroutineScope {
+                    germanTmdbProviders(videoType).map { candidate ->
+                        async(Dispatchers.IO) {
+                            runCatching {
+                                findGermanProviderServers(candidate, videoType)
+                            }.getOrElse { error ->
+                                Log.w(
+                                    "TmdbProvider",
+                                    "TMDB-DE ${candidate.label} failed",
+                                    error
+                                )
+                                emptyList()
+                            }
+                        }
+                    }.awaitAll().flatten()
+                }
+
+                servers.addAll(nativeGermanServers)
+
                 if (videoType is Video.Type.Movie) {
                     servers.add(EinschaltenExtractor().server(videoType))
                 }
-                VideasyExtractor().server(videoType, language)?.let { servers.add(it) }
+
+                VideasyExtractor()
+                    .server(videoType, language)
+                    ?.let { servers.add(it) }
             }
             "fr" -> {
                 // Solo server francesi
@@ -874,7 +925,232 @@ class TmdbProvider(override val language: String) : Provider {
         return finalServers.distinctBy { it.id }
     }
 
+
+    private data class GermanTmdbProvider(
+        val key: String,
+        val label: String,
+        val provider: Provider,
+        val movies: Boolean,
+        val tvShows: Boolean,
+    )
+
+    private fun germanTmdbProviders(
+        videoType: Video.Type
+    ): List<GermanTmdbProvider> {
+        val all = listOf(
+            GermanTmdbProvider(
+                "vavoo",
+                "Vavoo VOD",
+                VavooVodProvider.DE,
+                movies = true,
+                tvShows = true,
+            ),
+            GermanTmdbProvider(
+                "hdfilme",
+                "HDFilme",
+                HDFilmeProvider,
+                movies = true,
+                tvShows = true,
+            ),
+            GermanTmdbProvider(
+                "megakino",
+                "MegaKino",
+                MEGAKinoProvider,
+                movies = true,
+                tvShows = true,
+            ),
+            GermanTmdbProvider(
+                "filmpalast",
+                "FilmPalast",
+                FilmPalastProvider,
+                movies = true,
+                tvShows = true,
+            ),
+            GermanTmdbProvider(
+                "kellerkino",
+                "KellerKino",
+                KellerKinoProvider,
+                movies = true,
+                tvShows = false,
+            ),
+            GermanTmdbProvider(
+                "serienstream",
+                "SerienStream",
+                SerienStreamProvider,
+                movies = false,
+                tvShows = true,
+            ),
+            GermanTmdbProvider(
+                "aniworld",
+                "AniWorld",
+                AniWorldProvider,
+                movies = false,
+                tvShows = true,
+            ),
+        )
+
+        return when (videoType) {
+            is Video.Type.Movie -> all.filter { it.movies }
+            is Video.Type.Episode -> all.filter { it.tvShows }
+        }
+    }
+
+    private fun normalizeGermanTitle(value: String): String =
+        value.lowercase()
+            .replace("ä", "ae")
+            .replace("ö", "oe")
+            .replace("ü", "ue")
+            .replace("ß", "ss")
+            .replace(Regex("[^a-z0-9]"), "")
+
+    private fun titleScore(
+        candidate: String,
+        target: String
+    ): Int {
+        val c = normalizeGermanTitle(candidate)
+        val t = normalizeGermanTitle(target)
+
+        if (c.isBlank() || t.isBlank()) return 0
+        if (c == t) return 100
+        if (c.startsWith(t) || t.startsWith(c)) return 80
+        if (c.contains(t) || t.contains(c)) return 60
+
+        return 0
+    }
+
+    private suspend fun findGermanProviderServers(
+        candidate: GermanTmdbProvider,
+        videoType: Video.Type,
+    ): List<Video.Server> = withTimeoutOrNull(15_000L) {
+
+        val targetTitle = when (videoType) {
+            is Video.Type.Movie -> videoType.title
+            is Video.Type.Episode -> videoType.tvShow.title
+        }
+
+        val results =
+            candidate.provider.search(targetTitle, 1)
+
+        when (videoType) {
+            is Video.Type.Movie -> {
+                val match = results
+                    .filterIsInstance<Movie>()
+                    .map {
+                        it to titleScore(it.title, targetTitle)
+                    }
+                    .filter { it.second >= 60 }
+                    .maxByOrNull { it.second }
+                    ?.first
+                    ?: return@withTimeoutOrNull emptyList()
+
+                candidate.provider
+                    .getServers(match.id, videoType)
+                    .map {
+                        wrapGermanTmdbServer(candidate, it)
+                    }
+            }
+
+            is Video.Type.Episode -> {
+                val match = results
+                    .filterIsInstance<TvShow>()
+                    .map {
+                        it to titleScore(it.title, targetTitle)
+                    }
+                    .filter { it.second >= 60 }
+                    .maxByOrNull { it.second }
+                    ?.first
+                    ?: return@withTimeoutOrNull emptyList()
+
+                val details =
+                    candidate.provider.getTvShow(match.id)
+
+                val season =
+                    details.seasons.firstOrNull {
+                        it.number == videoType.season.number
+                    }
+                    ?: return@withTimeoutOrNull emptyList()
+
+                val episodes =
+                    candidate.provider
+                        .getEpisodesBySeason(season.id)
+
+                val episode =
+                    episodes.firstOrNull {
+                        it.number == videoType.number
+                    }
+                    ?: return@withTimeoutOrNull emptyList()
+
+                candidate.provider
+                    .getServers(episode.id, videoType)
+                    .map {
+                        wrapGermanTmdbServer(candidate, it)
+                    }
+            }
+        }
+    } ?: emptyList()
+
+    private fun wrapGermanTmdbServer(
+        candidate: GermanTmdbProvider,
+        server: Video.Server,
+    ): Video.Server =
+        Video.Server(
+            id = "tmdbde:${candidate.key}:${server.id}",
+            name = "${candidate.label} • ${server.name}",
+            src = server.src,
+        ).also {
+            it.video = server.video
+        }
+
+    private fun germanProviderByKey(
+        key: String
+    ): Provider? =
+        when (key) {
+            "vavoo" -> VavooVodProvider.DE
+            "hdfilme" -> HDFilmeProvider
+            "megakino" -> MEGAKinoProvider
+            "filmpalast" -> FilmPalastProvider
+            "kellerkino" -> KellerKinoProvider
+            "serienstream" -> SerienStreamProvider
+            "aniworld" -> AniWorldProvider
+            else -> null
+        }
+
+    private suspend fun getGermanProviderVideo(
+        server: Video.Server
+    ): Video? {
+        if (!server.id.startsWith("tmdbde:")) {
+            return null
+        }
+
+        val parts =
+            server.id.split(":", limit = 3)
+
+        if (parts.size != 3) {
+            return null
+        }
+
+        val provider =
+            germanProviderByKey(parts[1])
+                ?: return null
+
+        val original =
+            Video.Server(
+                id = parts[2],
+                name = server.name.substringAfter(
+                    " • ",
+                    server.name
+                ),
+                src = server.src,
+            ).also {
+                it.video = server.video
+            }
+
+        return provider.getVideo(original)
+    }
+
     override suspend fun getVideo(server: Video.Server): Video {
+        getGermanProviderVideo(server)?.let { return it }
+
         val url = server.src.ifEmpty { server.id }
         Log.i("StreamFlixES", "[SERVER] -> Using: ${server.name} (URL: $url)")
         

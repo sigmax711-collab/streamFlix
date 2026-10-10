@@ -56,6 +56,7 @@
 	<string name="option_show_mark_all_previous_watched">ضع علامة كمشاهدة حتى هنا</string>
     <string name="option_show_mark_all_previous_unwatched">ضع علامة عدم المشاهدة حتى هنا</string>
     <string name="option_show_unwatched">إلغاء الوسم كمشاهد</string>
+    <string name="option_show_remove_recently_watched">إزالة من تم مشاهدته مؤخراً</string>
 	<string name="option_clear_program">إزالة من متابعة المشاهدة</string>
 	<string name="option_cancel">إلغاء</string>
 
@@ -531,4 +532,25 @@
     <string name="settings_profile_add_summary">إنشاء ملف شخصي جديد</string>
     <string name="supabase_instructions_title">التعليمات</string>
     <string name="supabase_instructions_summary">فتح الدليل التفصيلي لإعداد حساب ومزامنة Supabase في المتصفح</string>
+
+    <string name="settings_category_recently_watched">شوهد مؤخراً</string>
+    <string name="settings_tmdb_categories_title">فئات الصفحة الرئيسية (مزود TMDB)</string>
+    <string name="settings_tmdb_categories_summary">اختر الفئات التي تريد عرضها على الشاشة الرئيسية.</string>
+
+    <string name="tmdb_category_featured">مميز</string>
+    <string name="tmdb_category_trending">رائج</string>
+    <string name="tmdb_category_popular_movies">أفلام شائعة</string>
+    <string name="tmdb_category_popular_tv">برامج تلفزيونية شائعة</string>
+    <string name="tmdb_category_popular_anime">أنمي شائع</string>
+    <string name="tmdb_category_netflix">شائع على Netflix</string>
+    <string name="tmdb_category_amazon">شائع على Amazon</string>
+    <string name="tmdb_category_disney">شائع على Disney+</string>
+    <string name="tmdb_category_hulu">شائع على Hulu</string>
+    <string name="tmdb_category_apple">شائع على Apple TV+</string>
+    <string name="tmdb_category_hbo">شائع على HBO</string>
+    <string name="settings_enable_recently_watched_summary">عرض قائمة بالأفلام والبرامج التلفزيونية التي شاهدتها مؤخرًا على الشاشة الرئيسية.</string>
+    <string name="settings_clear_recently_watched_title">مسح سجل شوهد مؤخراً</string>
+    <string name="settings_clear_recently_watched_summary">إزالة جميع العناصر المحفوظة من قائمة شوهد مؤخراً.</string>
+    <string name="settings_clear_recently_watched_dialog_message">هل أنت متأكد أنك تريد مسح سجل شوهد مؤخراً بالكامل؟</string>
+    <string name="settings_clear_recently_watched_done">تم مسح سجل شوهد مؤخراً.</string>
 </resources>

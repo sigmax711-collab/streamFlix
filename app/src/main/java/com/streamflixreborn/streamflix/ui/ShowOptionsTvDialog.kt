@@ -69,6 +69,33 @@ class ShowOptionsTvDialog(
             is TvShow -> displayTvShow(show)
         }
 
+        val isRecentlyWatched = show.itemType == AppAdapter.Type.MOVIE_RECENTLY_WATCHED_MOBILE_ITEM ||
+                show.itemType == AppAdapter.Type.MOVIE_RECENTLY_WATCHED_TV_ITEM ||
+                show.itemType == AppAdapter.Type.EPISODE_RECENTLY_WATCHED_MOBILE_ITEM ||
+                show.itemType == AppAdapter.Type.EPISODE_RECENTLY_WATCHED_TV_ITEM ||
+                show.itemType == AppAdapter.Type.TV_SHOW_RECENTLY_WATCHED_MOBILE_ITEM ||
+                show.itemType == AppAdapter.Type.TV_SHOW_RECENTLY_WATCHED_TV_ITEM
+
+        if (isRecentlyWatched) {
+            binding.btnOptionEpisodeOpenTvShow.visibility = View.GONE
+            binding.btnOptionEpisodeMarkAllPreviousWatched.visibility = View.GONE
+            binding.btnOptionProgramClear.visibility = View.GONE
+
+            binding.btnOptionShowWatched.apply {
+                text = context.getString(R.string.option_show_remove_recently_watched)
+                visibility = View.VISIBLE
+                setOnClickListener {
+                    context.toActivity()?.lifecycleScope?.launch(Dispatchers.IO) {
+                        when (show) {
+                            is Movie -> AppDatabase.getInstance(context).movieDao().removeFromRecentlyWatched(show.id)
+                            is TvShow -> AppDatabase.getInstance(context).tvShowDao().removeFromRecentlyWatched(show.id)
+                            is Episode -> show.tvShow?.let { AppDatabase.getInstance(context).tvShowDao().removeFromRecentlyWatched(it.id) }
+                        }
+                    }
+                    hide()
+                }
+            }
+        }
 
         window?.attributes = window?.attributes?.also { param ->
             param.gravity = Gravity.END

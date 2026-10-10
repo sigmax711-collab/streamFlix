@@ -241,11 +241,12 @@ class HomeTvFragment : Fragment() {
                 .filter { it.list.isNotEmpty() }
                 .onEach { category ->
                     if (category.name != getString(R.string.home_continue_watching)) {
+                        val isRecentlyWatched = category.name == getString(R.string.home_recently_watched)
                         category.list.forEach { show ->
                             when (show) {
-                                is Episode -> show.itemType = AppAdapter.Type.EPISODE_TV_ITEM
-                                is Movie -> show.itemType = AppAdapter.Type.MOVIE_TV_ITEM
-                                is TvShow -> show.itemType = AppAdapter.Type.TV_SHOW_TV_ITEM
+                                is Episode -> show.itemType = if (isRecentlyWatched) AppAdapter.Type.EPISODE_RECENTLY_WATCHED_TV_ITEM else AppAdapter.Type.EPISODE_TV_ITEM
+                                is Movie -> show.itemType = if (isRecentlyWatched) AppAdapter.Type.MOVIE_RECENTLY_WATCHED_TV_ITEM else AppAdapter.Type.MOVIE_TV_ITEM
+                                is TvShow -> show.itemType = if (isRecentlyWatched) AppAdapter.Type.TV_SHOW_RECENTLY_WATCHED_TV_ITEM else AppAdapter.Type.TV_SHOW_TV_ITEM
                             }
                         }
                     }

@@ -62,6 +62,7 @@
     <string name="option_show_mark_all_previous_watched">Segna come visto fino qui</string>
     <string name="option_show_mark_all_previous_unwatched">Segna come non visto fino a qui</string>
     <string name="option_show_unwatched">Segna come non visto</string>
+    <string name="option_show_remove_recently_watched">Rimuovi da Guardati di recente</string>
     <string name="option_clear_program">Rimuovi da Continua a Guardare</string>
     <string name="option_cancel">Annulla</string>
 
@@ -536,4 +537,26 @@
     <string name="settings_profile_add_summary">Crea un nuovo profilo</string>
     <string name="supabase_instructions_title">Istruzioni</string>
     <string name="supabase_instructions_summary">Apri nel browser la guida dettagliata per configurare account e sincronizzazione Supabase</string>
+
+    <string name="settings_category_recently_watched">Guardati di recente</string>
+    <string name="settings_tmdb_categories_title">Categorie Home (Provider TMDB)</string>
+    <string name="settings_tmdb_categories_summary">Scegli quali categorie mostrare nella schermata principale.</string>
+
+    <string name="tmdb_category_featured">In evidenza</string>
+    <string name="tmdb_category_trending">Di tendenza</string>
+    <string name="tmdb_category_popular_movies">Film popolari</string>
+    <string name="tmdb_category_popular_tv">Serie TV popolari</string>
+    <string name="tmdb_category_popular_anime">Anime popolari</string>
+    <string name="tmdb_category_netflix">Popolari su Netflix</string>
+    <string name="tmdb_category_amazon">Popolari su Amazon</string>
+    <string name="tmdb_category_disney">Popolari su Disney+</string>
+    <string name="tmdb_category_hulu">Popolari su Hulu</string>
+    <string name="tmdb_category_apple">Popolari su Apple TV+</string>
+    <string name="tmdb_category_hbo">Popolari su HBO</string>
+    <string name="settings_enable_recently_watched_title">Mostra Guardati di recente nella Home</string>
+    <string name="settings_enable_recently_watched_summary">Mostra la lista dei film e serie TV guardati di recente nella schermata principale.</string>
+    <string name="settings_clear_recently_watched_title">Cancella cronologia Guardati di recente</string>
+    <string name="settings_clear_recently_watched_summary">Rimuovi tutti gli elementi salvati dalla lista dei Guardati di recente.</string>
+    <string name="settings_clear_recently_watched_dialog_message">Sei sicuro di voler cancellare tutta la cronologia dei Guardati di recente?</string>
+    <string name="settings_clear_recently_watched_done">Cronologia Guardati di recente cancellata.</string>
 </resources>

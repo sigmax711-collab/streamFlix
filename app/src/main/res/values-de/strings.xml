@@ -61,6 +61,7 @@
     <string name="option_show_mark_all_previous_watched">Bis hier als Gesehen markieren</string>
     <string name="option_show_mark_all_previous_unwatched">Bis hier als Ungesehen markieren</string>
     <string name="option_show_unwatched">Als Ungesehen markieren</string>
+    <string name="option_show_remove_recently_watched">Aus „Zuletzt angesehen" entfernen</string>
     <string name="option_clear_program">Aus Weiterschauen entfernen</string>
     <string name="option_cancel">Abbrechen</string>
 
@@ -539,4 +540,25 @@
     <string name="settings_provider_domain_check_current">Domain ist bereits aktuell</string>
     <string name="settings_provider_domain_check_updated">Neue Domain übernommen: %1$s</string>
     <string name="settings_provider_domain_check_failed">Domain-Prüfung fehlgeschlagen: %1$s</string>
+
+    <string name="settings_category_recently_watched">Zuletzt angesehen</string>
+    <string name="settings_tmdb_categories_title">Startseite-Kategorien (TMDB Provider)</string>
+    <string name="settings_tmdb_categories_summary">Wähle aus, welche Kategorien auf der Startseite angezeigt werden sollen.</string>
+
+    <string name="tmdb_category_featured">Im Rampenlicht</string>
+    <string name="tmdb_category_trending">Trends</string>
+    <string name="tmdb_category_popular_movies">Beliebte Filme</string>
+    <string name="tmdb_category_popular_tv">Beliebte Serien</string>
+    <string name="tmdb_category_popular_anime">Beliebte Anime</string>
+    <string name="tmdb_category_netflix">Beliebt bei Netflix</string>
+    <string name="tmdb_category_amazon">Beliebt bei Amazon</string>
+    <string name="tmdb_category_disney">Beliebt bei Disney+</string>
+    <string name="tmdb_category_hulu">Beliebt bei Hulu</string>
+    <string name="tmdb_category_apple">Beliebt bei Apple TV+</string>
+    <string name="tmdb_category_hbo">Beliebt bei HBO</string>
+    <string name="settings_enable_recently_watched_summary">Zeigt die Liste der zuletzt angesehenen Filme und Serien auf der Startseite an.</string>
+    <string name="settings_clear_recently_watched_title">Zuletzt angesehenen Verlauf löschen</string>
+    <string name="settings_clear_recently_watched_summary">Entfernt alle gespeicherten Elemente aus der Liste der zuletzt angesehenen Titel.</string>
+    <string name="settings_clear_recently_watched_dialog_message">Möchtest du deinen gesamten Verlauf der zuletzt angesehenen Titel wirklich löschen?</string>
+    <string name="settings_clear_recently_watched_done">Zuletzt angesehener Verlauf gelöscht.</string>
 </resources>

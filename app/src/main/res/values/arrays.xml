@@ -77,4 +77,46 @@
         <item>LAT</item>
         <item>SUB</item>
     </string-array>
+
+    <string-array name="tmdb_home_categories_entries">
+        <item>@string/tmdb_category_featured</item>
+        <item>@string/tmdb_category_trending</item>
+        <item>@string/tmdb_category_popular_movies</item>
+        <item>@string/tmdb_category_popular_tv</item>
+        <item>@string/tmdb_category_popular_anime</item>
+        <item>@string/tmdb_category_netflix</item>
+        <item>@string/tmdb_category_amazon</item>
+        <item>@string/tmdb_category_disney</item>
+        <item>@string/tmdb_category_hulu</item>
+        <item>@string/tmdb_category_apple</item>
+        <item>@string/tmdb_category_hbo</item>
+    </string-array>
+
+    <string-array name="tmdb_home_categories_values">
+        <item>featured</item>
+        <item>trending</item>
+        <item>popular_movies</item>
+        <item>popular_tv</item>
+        <item>popular_anime</item>
+        <item>netflix</item>
+        <item>amazon</item>
+        <item>disney</item>
+        <item>hulu</item>
+        <item>apple</item>
+        <item>hbo</item>
+    </string-array>
+
+    <string-array name="tmdb_home_categories_default">
+        <item>featured</item>
+        <item>trending</item>
+        <item>popular_movies</item>
+        <item>popular_tv</item>
+        <item>popular_anime</item>
+        <item>netflix</item>
+        <item>amazon</item>
+        <item>disney</item>
+        <item>hulu</item>
+        <item>apple</item>
+        <item>hbo</item>
+    </string-array>
 </resources>
