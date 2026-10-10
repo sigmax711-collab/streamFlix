@@ -4,6 +4,7 @@ import com.streamflixreborn.streamflix.adapters.AppAdapter
 import com.streamflixreborn.streamflix.extractors.Extractor
 import com.streamflixreborn.streamflix.extractors.TwoEmbedExtractor
 import com.streamflixreborn.streamflix.extractors.VidLinkExtractor
+import com.streamflixreborn.streamflix.extractors.VidnestTmdbResolver
 import com.streamflixreborn.streamflix.extractors.VideasyExtractor
 import com.streamflixreborn.streamflix.extractors.VidrockExtractor
 import com.streamflixreborn.streamflix.models.Category
@@ -133,9 +134,9 @@ object NetPrimeProvider : Provider {
         val servers = mutableListOf<Video.Server>()
 
         /*
-         * Vidnest is the one source where NetPrime's current iframe
-         * domain differs from Streamflix's older extractor mainUrl.
-         * The .fun domain is registered as an extractor alias below.
+         * Vidnest here is the separate TMDb-backed source served by
+         * vidnest.fun. It is unrelated to the vidnest.io host handled
+         * by VidnestExtractor.
          */
         servers += Video.Server(
             id = "netprime-vidnest",
@@ -170,6 +171,12 @@ object NetPrimeProvider : Provider {
         server: Video.Server,
     ): Video {
         server.video?.let { return it }
+
+        if (server.id == "netprime-vidnest") {
+            VidnestTmdbResolver
+                .extract(server.src)
+                ?.let { return it }
+        }
 
         return Extractor.extract(
             server.src,
