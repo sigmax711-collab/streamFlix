@@ -337,6 +337,11 @@
                 android:title="@string/settings_provider_domain_check"
                 android:summary="@string/settings_provider_domain_check_summary" />
 
+            <Preference
+                android:key="provider_domain_generic_next"
+                android:title="@string/settings_vavoo_domain_next"
+                android:summary="@string/settings_vavoo_domain_next_summary" />
+
         </PreferenceCategory>
 
         <PreferenceCategory

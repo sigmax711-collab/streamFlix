@@ -46,6 +46,8 @@ import com.streamflixreborn.streamflix.utils.ProviderChangeNotifier
 import com.streamflixreborn.streamflix.utils.ThemeManager
 import com.streamflixreborn.streamflix.utils.UserPreferences
 import com.streamflixreborn.streamflix.utils.DomainRedirectChecker
+import com.streamflixreborn.streamflix.utils.VavooDomainSelector
+import com.streamflixreborn.streamflix.providers.VavooConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -849,8 +851,32 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
     }
 
 
-    private fun configurableDomainDefault(providerName: String?): String? =
-        when (providerName) {
+    private fun isVavooProviderName(
+        providerName: String?,
+    ): Boolean =
+        providerName
+            ?.startsWith(
+                "Vavoo",
+                ignoreCase = true,
+            ) == true
+
+    private fun configurableDomainPreferenceKey(
+        providerName: String,
+    ): String =
+        if (isVavooProviderName(providerName)) {
+            VavooConfig.SETTINGS_KEY
+        } else {
+            providerName
+        }
+
+    private fun configurableDomainDefault(
+        providerName: String?,
+    ): String? {
+        if (isVavooProviderName(providerName)) {
+            return VavooConfig.DEFAULT_BASE_URL
+        }
+
+        return when (providerName) {
             "AniWorld" -> "https://aniworld.to/"
             "Filmpalast" -> "https://filmpalast.to/"
             "HDFilme" -> "https://hdfilme.cafe/"
@@ -860,69 +886,132 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
             "Kellerkino" -> "https://www.kellerkino.com/"
             else -> null
         }
+    }
 
     private fun bindGenericProviderDomain() {
-        val provider = UserPreferences.currentProvider ?: return
-        val defaultBaseUrl = configurableDomainDefault(provider.name) ?: return
+        val provider =
+            UserPreferences.currentProvider
+                ?: return
 
-        findPreference<EditTextPreference>("provider_domain_generic")?.apply {
+        val defaultBaseUrl =
+            configurableDomainDefault(
+                provider.name
+            ) ?: return
+
+        val providerKey =
+            configurableDomainPreferenceKey(
+                provider.name
+            )
+
+        findPreference<EditTextPreference>(
+            "provider_domain_generic"
+        )?.apply {
+
             val displayDomain =
-                UserPreferences.providerDomainForDisplay(provider.name, defaultBaseUrl)
+                UserPreferences.providerDomainForDisplay(
+                    providerKey,
+                    defaultBaseUrl,
+                )
 
             summary = displayDomain
 
-            val customDomain = UserPreferences.getProviderCustomDomain(provider.name)
-            text = customDomain.ifBlank { null }
+            val customDomain =
+                UserPreferences.getProviderCustomDomain(
+                    providerKey
+                )
+
+            text =
+                customDomain.ifBlank {
+                    null
+                }
 
             setOnBindEditTextListener { editText ->
-                editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-                editText.imeOptions = EditorInfo.IME_ACTION_DONE
-                editText.hint = UserPreferences.providerDomainForDisplay(
-                    provider.name,
-                    defaultBaseUrl
-                )
+                editText.inputType =
+                    InputType.TYPE_CLASS_TEXT or
+                        InputType.TYPE_TEXT_VARIATION_URI
+
+                editText.imeOptions =
+                    EditorInfo.IME_ACTION_DONE
+
+                editText.hint =
+                    UserPreferences.providerDomainForDisplay(
+                        providerKey,
+                        defaultBaseUrl,
+                    )
             }
 
-            setOnPreferenceChangeListener { preference, newValue ->
-                val typed = (newValue as String).trim()
+            setOnPreferenceChangeListener {
+                    preference,
+                    newValue,
+                ->
+
+                val typed =
+                    (newValue as String)
+                        .trim()
 
                 if (typed.isBlank()) {
-                    UserPreferences.resetProviderCustomDomain(provider.name)
+                    UserPreferences
+                        .resetProviderCustomDomain(
+                            providerKey
+                        )
                 } else {
-                    UserPreferences.setProviderCustomDomain(provider.name, typed)
+                    UserPreferences
+                        .setProviderCustomDomain(
+                            providerKey,
+                            typed,
+                        )
                 }
 
                 preference.summary =
-                    UserPreferences.providerDomainForDisplay(provider.name, defaultBaseUrl)
+                    UserPreferences
+                        .providerDomainForDisplay(
+                            providerKey,
+                            defaultBaseUrl,
+                        )
 
-                ProviderChangeNotifier.notifyProviderChanged()
+                ProviderChangeNotifier
+                    .notifyProviderChanged()
 
                 true
             }
         }
 
-        findPreference<Preference>("provider_domain_generic_reset")
-            ?.setOnPreferenceClickListener {
-                UserPreferences.resetProviderCustomDomain(provider.name)
+        findPreference<Preference>(
+            "provider_domain_generic_reset"
+        )?.setOnPreferenceClickListener {
 
-                findPreference<EditTextPreference>("provider_domain_generic")?.apply {
-                    text = null
-                    summary = UserPreferences.providerDomainForDisplay(
-                        provider.name,
-                        defaultBaseUrl
-                    )
-                }
+            UserPreferences
+                .resetProviderCustomDomain(
+                    providerKey
+                )
 
-                ProviderChangeNotifier.notifyProviderChanged()
+            findPreference<EditTextPreference>(
+                "provider_domain_generic"
+            )?.apply {
+                text = null
 
-                Toast.makeText(
-                    requireContext(),
-                    getString(R.string.settings_provider_domain_reset_done),
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                true
+                summary =
+                    UserPreferences
+                        .providerDomainForDisplay(
+                            providerKey,
+                            defaultBaseUrl,
+                        )
             }
+
+            ProviderChangeNotifier
+                .notifyProviderChanged()
+
+            Toast.makeText(
+                requireContext(),
+                getString(
+                    R.string
+                        .settings_provider_domain_reset_done
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+
+            true
+        }
     }
 
     private fun updateProviderVisibilityState() {
@@ -946,6 +1035,13 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
 
         findPreference<PreferenceCategory>("pc_generic_provider_domain_settings")?.isVisible =
             hasGenericDomain
+
+        findPreference<Preference>(
+            "provider_domain_generic_next"
+        )?.isVisible =
+            isVavooProviderName(
+                UserPreferences.currentProvider?.name
+            )
         findPreference<PreferenceCategory>("pc_streamingcommunity_settings")?.isVisible = isStreamingCommunity
         findPreference<PreferenceCategory>("pc_serienstream_settings")?.isVisible = isSerienStream
         findPreference<PreferenceCategory>("pc_moflix_settings")?.isVisible = isMoflix
@@ -1018,8 +1114,9 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
             }
         }
 
-        // PR1 generic German providers:
-        // AniWorld, FilmPalast, HDFilme, MEGAKino, Einschalten
+        // Generic provider domain check.
+        // Vavoo is special: it always starts from vavoo.to and
+        // walks the ordered mirror list until one responds.
         findPreference<Preference>(
             "provider_domain_generic_check"
         )?.setOnPreferenceClickListener {
@@ -1031,7 +1128,9 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
                 provider?.name
 
             val defaultBase =
-                configurableDomainDefault(providerName)
+                configurableDomainDefault(
+                    providerName
+                )
 
             if (
                 providerName.isNullOrBlank() ||
@@ -1040,43 +1139,170 @@ class SettingsMobileFragment : PreferenceFragmentCompat() {
                 Toast.makeText(
                     requireContext(),
                     getString(
-                        R.string.settings_provider_domain_check_failed,
-                        "Provider not supported"
+                        R.string
+                            .settings_provider_domain_check_failed,
+                        "Provider not supported",
                     ),
-                    Toast.LENGTH_LONG
+                    Toast.LENGTH_LONG,
                 ).show()
 
                 return@setOnPreferenceClickListener true
             }
 
-            val current =
-                UserPreferences.resolveProviderBaseUrl(
-                    providerName,
-                    defaultBase
+            val providerKey =
+                configurableDomainPreferenceKey(
+                    providerName
                 )
 
-            checkAndUpdate(
-                currentValue = { current },
-                saveValue = { newDomain ->
-                    UserPreferences.setProviderCustomDomain(
-                        providerName,
-                        newDomain
+            if (
+                isVavooProviderName(
+                    providerName
+                )
+            ) {
+                viewLifecycleOwner
+                    .lifecycleScope
+                    .launch {
+
+                        val result =
+                            runCatching {
+                                val selected =
+                                    VavooDomainSelector
+                                        .firstAvailable()
+
+                                val newDomain =
+                                    selected.finalUrl
+
+                                UserPreferences
+                                    .setProviderCustomDomain(
+                                        providerKey,
+                                        newDomain,
+                                    )
+
+                                findPreference<EditTextPreference>(
+                                    "provider_domain_generic"
+                                )?.apply {
+                                    text = newDomain
+                                    summary = newDomain
+                                }
+
+                                ProviderChangeNotifier
+                                    .notifyProviderChanged()
+
+                                getString(
+                                    R.string
+                                        .settings_provider_domain_check_updated,
+                                    newDomain,
+                                )
+                            }
+
+                        showDomainCheckResult(
+                            result
+                        )
+                    }
+
+                return@setOnPreferenceClickListener true
+            }
+
+            val current =
+                UserPreferences
+                    .resolveProviderBaseUrl(
+                        providerKey,
+                        defaultBase,
                     )
+
+            checkAndUpdate(
+                currentValue = {
+                    current
+                },
+                saveValue = { newDomain ->
+                    UserPreferences
+                        .setProviderCustomDomain(
+                            providerKey,
+                            newDomain,
+                        )
                 },
                 afterSave = {
                     findPreference<EditTextPreference>(
                         "provider_domain_generic"
                     )?.apply {
                         text =
-                            UserPreferences.providerDomainForDisplay(
-                                providerName,
-                                defaultBase
-                            )
+                            UserPreferences
+                                .providerDomainForDisplay(
+                                    providerKey,
+                                    defaultBase,
+                                )
 
                         summary = text
                     }
-                }
+                },
             )
+
+            true
+        }
+
+        // VAVOO_DOMAIN_NEXT_BUTTON_V1
+        findPreference<Preference>(
+            "provider_domain_generic_next"
+        )?.setOnPreferenceClickListener {
+
+            val providerName =
+                UserPreferences
+                    .currentProvider
+                    ?.name
+
+            if (
+                !isVavooProviderName(
+                    providerName
+                )
+            ) {
+                return@setOnPreferenceClickListener true
+            }
+
+            val current =
+                VavooConfig.baseUrl()
+
+            viewLifecycleOwner
+                .lifecycleScope
+                .launch {
+
+                    val result =
+                        runCatching {
+                            val selected =
+                                VavooDomainSelector
+                                    .nextAvailable(
+                                        current
+                                    )
+
+                            val newDomain =
+                                selected.finalUrl
+
+                            UserPreferences
+                                .setProviderCustomDomain(
+                                    VavooConfig.SETTINGS_KEY,
+                                    newDomain,
+                                )
+
+                            findPreference<EditTextPreference>(
+                                "provider_domain_generic"
+                            )?.apply {
+                                text = newDomain
+                                summary = newDomain
+                            }
+
+                            ProviderChangeNotifier
+                                .notifyProviderChanged()
+
+                            getString(
+                                R.string
+                                    .settings_vavoo_domain_next_updated,
+                                newDomain,
+                            )
+                        }
+
+                    showDomainCheckResult(
+                        result
+                    )
+                }
 
             true
         }
