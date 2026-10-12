@@ -73,10 +73,11 @@ class VavooProvider(override val language: String) : IptvProvider {
             .build()
     }
 
-    override val baseUrl: String = "https://vavoo.to"
+    // VAVOO_SHARED_DOMAIN_ROTATION_V1
+    // Live TV and VOD intentionally use the same selected Vavoo site.
+    override val baseUrl: String
+        get() = VavooConfig.baseUrl().trimEnd('/')
 
-    // VAVOO_VYPN_FINAL_DYNAMIC_LIVE_V21
-    // LIVE TV follows the user-selected Vavoo site. VOD remains in VavooVodProvider.
     private val liveBaseUrl: String
         get() = baseUrl.trimEnd('/')
     private val CATALOG_URL: String

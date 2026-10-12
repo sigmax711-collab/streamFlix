@@ -228,7 +228,6 @@
     <string name="settings_server_voe_title">تعطيل الترجمات التلقائية للخوادم</string>
     <string name="settings_server_voe_summary">إذا تم تفعيل هذا الخيار، فلن يتم تفعيل ترجمات خوادم VOE وVidnest وVidzy تلقائيًا حتى لو كانت متاحة ومحددة كافتراضية</string>
 
-
     <string name="player_settings_extra_buffer_title">خادم مع تخزين مؤقت إضافي</string>
     <string name="player_settings_extra_buffer_server_label">خادم مع تخزين مؤقت إضافي</string>
     <string name="player_settings_extra_buffer_on">مفعل</string>
@@ -368,10 +367,7 @@
     <string name="settings_category_poseidon_domain">اسم نطاق Poseidonhd2</string>
     <string name="settings_close_app">إغلاق التطبيق</string>
     <string name="settings_category_streamingcommunity_dnsOverHttps">استخدام DNS آمن</string>
-    <string name="settings_scan_resolver_qr_title">مسح رمز تجاوز التلفاز</string>
-    <string name="settings_scan_resolver_qr_summary">افتح الكاميرا وامسح رمز QR المعروض على التلفاز</string>
-    <string name="settings_scan_resolver_invalid_qr">رمز QR هذا ليس رابط تجاوز StreamFlix.</string>
-    <string name="settings_scan_resolver_failed">تعذر تشغيل ماسح QR على هذا الجهاز.</string>
+
     <string name="settings_category_provider_url_manual">إدخال يدوي</string>
     <string name="settings_autoplay_buffer_title">مهلة التشغيل التلقائي</string>
     <string name="settings_autoplay_buffer_dialog_message">حدد عدد الثواني قبل نهاية الحلقة للانتقال إلى الحلقة التالية.</string>
@@ -447,7 +443,7 @@
     <string name="settings_parental_unlocked">تم إلغاء قفل الرقابة الأبوية.</string>
     <string name="settings_parental_tmdb_disable_blocked">يجب عليك إلغاء قفل الرقابة الأبوية قبل تعطيل TMDb.</string>
     <string name="settings_screen_content_summary">الوصول إلى TMDb والرقابة الأبوية وقيود المحتوى</string>
-    <string name="settings_screen_network_summary">DNS وأدوات تجاوز التلفاز ومفاتيح خدمات الترجمة</string>
+    <string name="settings_screen_network_summary">DNS ومفاتيح خدمات الترجمة</string>
     <string name="settings_provider_connection_title">إعدادات المزود الحالي</string>
     <string name="settings_screen_provider_summary">النطاق الرئيسي والبوابة وخيارات الاسترداد الخاصة بالمزود</string>
     <string name="settings_screen_provider_summary_with_name">النطاق والبوابة وخيارات الاسترداد الخاصة بـ %1$s</string>
@@ -471,8 +467,7 @@
     <string name="settings_app_language_spanish">الإسبانية</string>
     <string name="settings_app_language_french">الفرنسية</string>
     <string name="settings_app_language_italian">الإيطالية</string>
-    <string name="settings_scan_resolver_camera_permission_denied">مطلوب إذن الكاميرا لمسح رمز QR.</string>
-    <string name="settings_scan_resolver_camera_unavailable">لا توجد كاميرا متاحة على هذا الجهاز.</string>
+
     <string name="backup_import_action">استيراد</string>
     <string name="backup_delete_action">حذف</string>
     <string name="backup_delete_confirm_title">حذف النسخة الاحتياطية</string>

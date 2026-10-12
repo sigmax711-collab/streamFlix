@@ -4,8 +4,6 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -13,15 +11,9 @@ import android.provider.MediaStore
 import android.text.InputType
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
-import android.util.DisplayMetrics
 import android.util.Log
-import android.util.TypedValue
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.widget.EditText
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -58,20 +50,18 @@ import com.streamflixreborn.streamflix.providers.MStreamProvider
 import com.streamflixreborn.streamflix.providers.SerienStreamProvider
 import com.streamflixreborn.streamflix.providers.StreamingCommunityProvider
 import com.streamflixreborn.streamflix.providers.TmdbProvider
-import com.streamflixreborn.streamflix.utils.BypassWebSocketEndpointHelper
 import com.streamflixreborn.streamflix.utils.AppLanguageManager
 import com.streamflixreborn.streamflix.utils.DnsResolver
 import com.streamflixreborn.streamflix.utils.ProviderChangeNotifier
-import com.streamflixreborn.streamflix.utils.QrUtils
 import com.streamflixreborn.streamflix.models.Profile
 import com.streamflixreborn.streamflix.utils.ProfileColorPicker
 import com.streamflixreborn.streamflix.utils.ProfileManager
 import com.streamflixreborn.streamflix.utils.ProfileSwitchPinGuard
 import com.streamflixreborn.streamflix.utils.ThemeManager
-import com.streamflixreborn.streamflix.utils.UserDataCache
 import com.streamflixreborn.streamflix.utils.UserPreferences
 import com.streamflixreborn.streamflix.utils.DomainRedirectChecker
-import com.streamflixreborn.streamflix.utils.WebSocketBypassTestHelper
+import com.streamflixreborn.streamflix.utils.VavooDomainSelector
+import com.streamflixreborn.streamflix.providers.VavooConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -766,49 +756,7 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
                 networkSettingsCategory.title = originalTitle
             }
 
-            if (BuildConfig.DEBUG && findPreference<EditTextPreference>("BYPASS_WS_ADVERTISED_HOST") == null) {
-                val hostPreference = EditTextPreference(requireContext()).apply {
-                    key = "BYPASS_WS_ADVERTISED_HOST"
-                    title = "Bypass advertised host"
-                    dialogTitle = "Bypass advertised host"
-                    summary = if (UserPreferences.bypassWsAdvertisedHost.isBlank()) {
-                        "Auto (device IP)"
-                    } else {
-                        UserPreferences.bypassWsAdvertisedHost
-                    }
-                    text = UserPreferences.bypassWsAdvertisedHost
-                    setOnBindEditTextListener { editText ->
-                        editText.setSingleLine()
-                        editText.hint = "192.168.1.50"
-                        editText.setText(UserPreferences.bypassWsAdvertisedHost)
-                        editText.setSelection(editText.text?.length ?: 0)
-                    }
-                    setOnPreferenceChangeListener { preference, newValue ->
-                        val value = (newValue as String).trim()
-                        UserPreferences.bypassWsAdvertisedHost = value
-                        preference.summary = if (value.isBlank()) {
-                            "Auto (device IP)"
-                        } else {
-                            value
-                        }
-                        true
-                    }
-                }
-                networkSettingsCategory.addPreference(hostPreference)
-            }
 
-            if (BuildConfig.DEBUG && findPreference<Preference>("test_websocket_bypass") == null) {
-                val testPreference = Preference(requireContext()).apply {
-                    key = "test_websocket_bypass"
-                    title = "Test WebSocket bypass"
-                    summary = "Generate a QR code for the mobile resolver flow"
-                    setOnPreferenceClickListener {
-                        showWebSocketBypassTestDialog()
-                        true
-                    }
-                }
-                networkSettingsCategory.addPreference(testPreference)
-            }
         }
 
         findPreference<Preference>("key_backup_export_tv")?.setOnPreferenceClickListener {
@@ -1530,79 +1478,167 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
     }
 
 
-    private fun configurableDomainDefault(providerName: String?): String? =
-        when (providerName) {
+    private fun isVavooProviderName(
+        providerName: String?,
+    ): Boolean =
+        providerName
+            ?.startsWith(
+                "Vavoo",
+                ignoreCase = true,
+            ) == true
+
+    private fun configurableDomainPreferenceKey(
+        providerName: String,
+    ): String =
+        if (isVavooProviderName(providerName)) {
+            VavooConfig.SETTINGS_KEY
+        } else {
+            providerName
+        }
+
+    private fun configurableDomainDefault(
+        providerName: String?,
+    ): String? {
+        if (isVavooProviderName(providerName)) {
+            return VavooConfig.DEFAULT_BASE_URL
+        }
+
+        return when (providerName) {
             "AniWorld" -> "https://aniworld.to/"
             "Filmpalast" -> "https://filmpalast.to/"
             "HDFilme" -> "https://hdfilme.cafe/"
             "MEGAKino" -> "https://megakino12.com"
+            "KinoGer" -> "https://kinoger.beer/"
             "Einschalten" -> "https://einschalten.in"
             "Kellerkino" -> "https://www.kellerkino.com/"
             else -> null
         }
+    }
 
     private fun bindGenericProviderDomain() {
-        val provider = UserPreferences.currentProvider ?: return
-        val defaultBaseUrl = configurableDomainDefault(provider.name) ?: return
+        val provider =
+            UserPreferences.currentProvider
+                ?: return
 
-        findPreference<EditTextPreference>("provider_domain_generic")?.apply {
+        val defaultBaseUrl =
+            configurableDomainDefault(
+                provider.name
+            ) ?: return
+
+        val providerKey =
+            configurableDomainPreferenceKey(
+                provider.name
+            )
+
+        findPreference<EditTextPreference>(
+            "provider_domain_generic"
+        )?.apply {
+
             val displayDomain =
-                UserPreferences.providerDomainForDisplay(provider.name, defaultBaseUrl)
+                UserPreferences.providerDomainForDisplay(
+                    providerKey,
+                    defaultBaseUrl,
+                )
 
             summary = displayDomain
 
-            val customDomain = UserPreferences.getProviderCustomDomain(provider.name)
-            text = customDomain.ifBlank { null }
+            val customDomain =
+                UserPreferences.getProviderCustomDomain(
+                    providerKey
+                )
+
+            text =
+                customDomain.ifBlank {
+                    null
+                }
 
             setOnBindEditTextListener { editText ->
-                editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-                editText.imeOptions = EditorInfo.IME_ACTION_DONE
-                editText.hint = UserPreferences.providerDomainForDisplay(
-                    provider.name,
-                    defaultBaseUrl
-                )
+                editText.inputType =
+                    InputType.TYPE_CLASS_TEXT or
+                        InputType.TYPE_TEXT_VARIATION_URI
+
+                editText.imeOptions =
+                    EditorInfo.IME_ACTION_DONE
+
+                editText.hint =
+                    UserPreferences.providerDomainForDisplay(
+                        providerKey,
+                        defaultBaseUrl,
+                    )
             }
 
-            setOnPreferenceChangeListener { preference, newValue ->
-                val typed = (newValue as String).trim()
+            setOnPreferenceChangeListener {
+                    preference,
+                    newValue,
+                ->
+
+                val typed =
+                    (newValue as String)
+                        .trim()
 
                 if (typed.isBlank()) {
-                    UserPreferences.resetProviderCustomDomain(provider.name)
+                    UserPreferences
+                        .resetProviderCustomDomain(
+                            providerKey
+                        )
                 } else {
-                    UserPreferences.setProviderCustomDomain(provider.name, typed)
+                    UserPreferences
+                        .setProviderCustomDomain(
+                            providerKey,
+                            typed,
+                        )
                 }
 
                 preference.summary =
-                    UserPreferences.providerDomainForDisplay(provider.name, defaultBaseUrl)
+                    UserPreferences
+                        .providerDomainForDisplay(
+                            providerKey,
+                            defaultBaseUrl,
+                        )
 
-                ProviderChangeNotifier.notifyProviderChanged()
+                ProviderChangeNotifier
+                    .notifyProviderChanged()
 
                 true
             }
         }
 
-        findPreference<Preference>("provider_domain_generic_reset")
-            ?.setOnPreferenceClickListener {
-                UserPreferences.resetProviderCustomDomain(provider.name)
+        findPreference<Preference>(
+            "provider_domain_generic_reset"
+        )?.setOnPreferenceClickListener {
 
-                findPreference<EditTextPreference>("provider_domain_generic")?.apply {
-                    text = null
-                    summary = UserPreferences.providerDomainForDisplay(
-                        provider.name,
-                        defaultBaseUrl
-                    )
-                }
+            UserPreferences
+                .resetProviderCustomDomain(
+                    providerKey
+                )
 
-                ProviderChangeNotifier.notifyProviderChanged()
+            findPreference<EditTextPreference>(
+                "provider_domain_generic"
+            )?.apply {
+                text = null
 
-                Toast.makeText(
-                    requireContext(),
-                    getString(R.string.settings_provider_domain_reset_done),
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                true
+                summary =
+                    UserPreferences
+                        .providerDomainForDisplay(
+                            providerKey,
+                            defaultBaseUrl,
+                        )
             }
+
+            ProviderChangeNotifier
+                .notifyProviderChanged()
+
+            Toast.makeText(
+                requireContext(),
+                getString(
+                    R.string
+                        .settings_provider_domain_reset_done
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+
+            true
+        }
     }
 
     private fun updateProviderVisibilityState() {
@@ -1626,6 +1662,13 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
 
         findPreference<PreferenceCategory>("pc_generic_provider_domain_settings")?.isVisible =
             hasGenericDomain
+
+        findPreference<Preference>(
+            "provider_domain_generic_next"
+        )?.isVisible =
+            isVavooProviderName(
+                UserPreferences.currentProvider?.name
+            )
         findPreference<PreferenceCategory>("pc_streamingcommunity_settings")?.isVisible = isStreamingCommunity
         findPreference<PreferenceCategory>("pc_serienstream_settings")?.isVisible = isSerienStream
         findPreference<PreferenceCategory>("pc_moflix_settings")?.isVisible = isMoflix
@@ -1698,8 +1741,9 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             }
         }
 
-        // PR1 generic German providers:
-        // AniWorld, FilmPalast, HDFilme, MEGAKino, Einschalten
+        // Generic provider domain check.
+        // Vavoo is special: it always starts from vavoo.to and
+        // walks the ordered mirror list until one responds.
         findPreference<Preference>(
             "provider_domain_generic_check"
         )?.setOnPreferenceClickListener {
@@ -1711,7 +1755,9 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
                 provider?.name
 
             val defaultBase =
-                configurableDomainDefault(providerName)
+                configurableDomainDefault(
+                    providerName
+                )
 
             if (
                 providerName.isNullOrBlank() ||
@@ -1720,43 +1766,170 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
                 Toast.makeText(
                     requireContext(),
                     getString(
-                        R.string.settings_provider_domain_check_failed,
-                        "Provider not supported"
+                        R.string
+                            .settings_provider_domain_check_failed,
+                        "Provider not supported",
                     ),
-                    Toast.LENGTH_LONG
+                    Toast.LENGTH_LONG,
                 ).show()
 
                 return@setOnPreferenceClickListener true
             }
 
-            val current =
-                UserPreferences.resolveProviderBaseUrl(
-                    providerName,
-                    defaultBase
+            val providerKey =
+                configurableDomainPreferenceKey(
+                    providerName
                 )
 
-            checkAndUpdate(
-                currentValue = { current },
-                saveValue = { newDomain ->
-                    UserPreferences.setProviderCustomDomain(
-                        providerName,
-                        newDomain
+            if (
+                isVavooProviderName(
+                    providerName
+                )
+            ) {
+                viewLifecycleOwner
+                    .lifecycleScope
+                    .launch {
+
+                        val result =
+                            runCatching {
+                                val selected =
+                                    VavooDomainSelector
+                                        .firstAvailable()
+
+                                val newDomain =
+                                    selected.finalUrl
+
+                                UserPreferences
+                                    .setProviderCustomDomain(
+                                        providerKey,
+                                        newDomain,
+                                    )
+
+                                findPreference<EditTextPreference>(
+                                    "provider_domain_generic"
+                                )?.apply {
+                                    text = newDomain
+                                    summary = newDomain
+                                }
+
+                                ProviderChangeNotifier
+                                    .notifyProviderChanged()
+
+                                getString(
+                                    R.string
+                                        .settings_provider_domain_check_updated,
+                                    newDomain,
+                                )
+                            }
+
+                        showDomainCheckResult(
+                            result
+                        )
+                    }
+
+                return@setOnPreferenceClickListener true
+            }
+
+            val current =
+                UserPreferences
+                    .resolveProviderBaseUrl(
+                        providerKey,
+                        defaultBase,
                     )
+
+            checkAndUpdate(
+                currentValue = {
+                    current
+                },
+                saveValue = { newDomain ->
+                    UserPreferences
+                        .setProviderCustomDomain(
+                            providerKey,
+                            newDomain,
+                        )
                 },
                 afterSave = {
                     findPreference<EditTextPreference>(
                         "provider_domain_generic"
                     )?.apply {
                         text =
-                            UserPreferences.providerDomainForDisplay(
-                                providerName,
-                                defaultBase
-                            )
+                            UserPreferences
+                                .providerDomainForDisplay(
+                                    providerKey,
+                                    defaultBase,
+                                )
 
                         summary = text
                     }
-                }
+                },
             )
+
+            true
+        }
+
+        // VAVOO_DOMAIN_NEXT_BUTTON_V1
+        findPreference<Preference>(
+            "provider_domain_generic_next"
+        )?.setOnPreferenceClickListener {
+
+            val providerName =
+                UserPreferences
+                    .currentProvider
+                    ?.name
+
+            if (
+                !isVavooProviderName(
+                    providerName
+                )
+            ) {
+                return@setOnPreferenceClickListener true
+            }
+
+            val current =
+                VavooConfig.baseUrl()
+
+            viewLifecycleOwner
+                .lifecycleScope
+                .launch {
+
+                    val result =
+                        runCatching {
+                            val selected =
+                                VavooDomainSelector
+                                    .nextAvailable(
+                                        current
+                                    )
+
+                            val newDomain =
+                                selected.finalUrl
+
+                            UserPreferences
+                                .setProviderCustomDomain(
+                                    VavooConfig.SETTINGS_KEY,
+                                    newDomain,
+                                )
+
+                            findPreference<EditTextPreference>(
+                                "provider_domain_generic"
+                            )?.apply {
+                                text = newDomain
+                                summary = newDomain
+                            }
+
+                            ProviderChangeNotifier
+                                .notifyProviderChanged()
+
+                            getString(
+                                R.string
+                                    .settings_vavoo_domain_next_updated,
+                                newDomain,
+                            )
+                        }
+
+                    showDomainCheckResult(
+                        result
+                    )
+                }
 
             true
         }
@@ -2286,12 +2459,6 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
             text = UserPreferences.subdlApiKey
         }
 
-        findPreference<EditTextPreference>("BYPASS_WS_ADVERTISED_HOST")?.apply {
-            val currentValue = UserPreferences.bypassWsAdvertisedHost
-            summary = if (currentValue.isBlank()) "Auto (device IP)" else currentValue
-            text = currentValue
-        }
-
         findPreference<ListPreference>("p_doh_provider_url")?.apply {
             summary = entry
         }
@@ -2321,260 +2488,4 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
         updateParentalControlPreferenceState()
     }
 
-    private fun showWebSocketBypassTestDialog() {
-        val defaultUrl = UserPreferences.currentProvider?.baseUrl ?: UserPreferences.cuevanaDomain.let { "https://$it" }
-        val input = EditText(requireContext()).apply {
-            setText(defaultUrl)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            imeOptions = EditorInfo.IME_ACTION_DONE
-            setSingleLine()
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Test WebSocket bypass")
-            .setMessage("Enter the URL that the mobile resolver should open.")
-            .setView(input)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val targetUrl = input.text?.toString()?.trim().orEmpty()
-                if (targetUrl.isBlank()) {
-                    Toast.makeText(requireContext(), "URL is required", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                val session = WebSocketBypassTestHelper.createSession(targetUrl) { token ->
-                    Log.d("BypassWSTest", "Resolver completed for token=$token")
-                }
-
-                if (session == null) {
-                    Toast.makeText(requireContext(), "Unable to start local websocket server", Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
-                }
-
-                showWebSocketBypassQrDialog(session.deepLink, session.wsUrl, targetUrl)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun showWebSocketBypassQrDialog(
-        deepLink: String,
-        wsUrl: String,
-        targetUrl: String,
-    ) {
-        val displayMetrics: DisplayMetrics = resources.displayMetrics
-        val density = displayMetrics.density
-        val dialogWidth = (displayMetrics.widthPixels * 0.72f).toInt()
-        val qrSize = minOf(
-            (dialogWidth - (density * 64).toInt()).coerceAtLeast((density * 240).toInt()),
-            (displayMetrics.heightPixels * 0.45f).toInt().coerceAtLeast((density * 240).toInt()),
-        )
-
-        val container = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(
-                (density * 24).toInt(),
-                (density * 16).toInt(),
-                (density * 24).toInt(),
-                (density * 12).toInt(),
-            )
-        }
-
-        val qrView = ImageView(requireContext()).apply {
-            adjustViewBounds = true
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageDrawable(BitmapDrawable(resources, QrUtils.generate(deepLink, qrSize)))
-        }
-
-        val instructionsView = TextView(requireContext()).apply {
-            text = buildString {
-                append("1. Open Settings on the mobile app.\n")
-                append("2. Use 'Scan Resolver QR'.\n")
-                append("3. Scan this code and complete the bypass page.\n\n")
-                append("WebSocket: ")
-                append(wsUrl)
-                append("\nTarget URL: ")
-                append(targetUrl)
-                if (BypassWebSocketEndpointHelper.isProbablyEmulator()) {
-                    append("\n\nEmulator note: set 'Bypass advertised host' to your PC LAN IP and forward TCP 8081 to the emulator.")
-                }
-            }
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setTextColor(Color.BLACK)
-        }
-
-        container.addView(
-            qrView,
-            LinearLayout.LayoutParams(
-                qrSize,
-                qrSize,
-            )
-        )
-        container.addView(
-            instructionsView,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            )
-        )
-
-        val scrollView = ScrollView(requireContext()).apply {
-            isFillViewport = true
-            addView(container)
-        }
-
-        val dialog = AlertDialog.Builder(requireContext())
-            .setTitle("WebSocket bypass QR")
-            .setView(scrollView)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
-
-        dialog.window?.setLayout(dialogWidth, LinearLayout.LayoutParams.WRAP_CONTENT)
-    }
-
-    private fun showCreateProfileDialogTv() {
-        val input = EditText(requireContext()).apply {
-            hint = getString(R.string.profile_name_hint)
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.profile_create_title)
-            .setView(input)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotBlank()) {
-                    lifecycleScope.launch {
-                        ProfileManager.createProfile(name)
-                        Toast.makeText(requireContext(), R.string.profile_created, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun showRenameProfileDialogTv(profile: Profile) {
-        val input = EditText(requireContext()).apply {
-            setText(profile.name)
-            hint = getString(R.string.profile_name_hint)
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.profile_rename_title)
-            .setView(input)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val newName = input.text.toString().trim()
-                if (newName.isNotBlank()) {
-                    lifecycleScope.launch {
-                        ProfileManager.renameProfile(profile.id, newName)
-                        Toast.makeText(requireContext(), R.string.profile_renamed, Toast.LENGTH_SHORT).show()
-                        updateOverviewLabels()
-                    }
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun showProfileManagementDialogTv() {
-        lifecycleScope.launch {
-            val profiles = ProfileManager.getAllProfiles()
-            val names = profiles.map { it.name }.toTypedArray()
-            AlertDialog.Builder(requireContext())
-                .setTitle(R.string.profile_manage_title)
-                .setItems(names) { _, which ->
-                    if (which < profiles.size) {
-                        showProfileActionsDialogTv(profiles[which], profiles.size)
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
-    }
-
-    private fun showProfileActionsDialogTv(profile: Profile, profileCount: Int = 1) {
-        val items = mutableListOf<String>().apply {
-            add(getString(R.string.profile_action_switch))
-            add(getString(R.string.profile_action_rename))
-            add(getString(R.string.profile_action_color))
-            if (profileCount > 1) {
-                add(getString(R.string.profile_action_delete))
-            }
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(profile.name)
-            .setItems(items.toTypedArray()) { _, which ->
-                when (items[which]) {
-                    getString(R.string.profile_action_switch) -> {
-                        if (profile.id == ProfileManager.activeProfileId) {
-                            switchProfileFromSettings(profile)
-                        } else {
-                            ProfileSwitchPinGuard.verifyCurrentProfile(requireContext()) {
-                                switchProfileFromSettings(profile)
-                            }
-                        }
-                    }
-                    getString(R.string.profile_action_rename) -> showRenameProfileDialogTv(profile)
-                    getString(R.string.profile_action_color) -> showProfileColorDialogTv(profile)
-                    getString(R.string.profile_action_delete) -> showDeleteProfileDialogTv(profile)
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun switchProfileFromSettings(profile: Profile) {
-        if (!isAdded) return
-        val oldProfileId = ProfileManager.activeProfileId
-        val oldLang = oldProfileId?.let { AppLanguageManager.getProfileLanguage(requireContext(), it) }
-        val oldTheme = UserPreferences.selectedTheme
-        lifecycleScope.launch {
-            ProfileManager.switchToProfile(profile.id)
-            val newLang = AppLanguageManager.getProfileLanguage(requireContext(), profile.id)
-            val newTheme = UserPreferences.selectedTheme
-            if (newLang != (oldLang ?: AppLanguageManager.SYSTEM_LANGUAGE) || newTheme != oldTheme) {
-                requireActivity().apply {
-                    finish()
-                    startActivity(Intent(this, this::class.java))
-                }
-            } else {
-                (requireActivity() as? MainTvActivity)?.recreateProviderHome()
-            }
-        }
-    }
-
-    private fun showDeleteProfileDialogTv(profile: Profile) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.profile_delete_title)
-            .setMessage(getString(R.string.profile_delete_message, profile.name))
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                lifecycleScope.launch {
-                    val success = ProfileManager.deleteProfile(profile.id)
-                    if (success) {
-                        Toast.makeText(requireContext(), R.string.profile_deleted, Toast.LENGTH_SHORT).show()
-                        if (ProfileManager.activeProfile?.id == profile.id) {
-                            requireActivity().apply {
-                                finish()
-                                startActivity(Intent(this, this::class.java))
-                            }
-                        }
-                    } else {
-                        Toast.makeText(requireContext(), R.string.profile_delete_error, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun showProfileColorDialogTv(profile: Profile) {
-        ProfileColorPicker.show(requireContext(), profile.avatarColor) { color ->
-            lifecycleScope.launch {
-                if (ProfileManager.setProfileColor(profile.id, color)) {
-                    Toast.makeText(requireContext(), R.string.profile_color_changed, Toast.LENGTH_SHORT).show()
-                    if (profile.id == ProfileManager.activeProfileId) requireActivity().recreate()
-                }
-            }
-        }
-    }
 }

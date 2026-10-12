@@ -381,10 +381,7 @@
     <string name="player_not_available_it_message">Auf italienischen Servern nicht verfügbar, suche es auf TMDB in anderen Sprachen</string>
     <string name="settings_category_poseidon">Poseidonhd2-Einstellungen</string>
     <string name="settings_category_poseidon_domain">Poseidonhd2-Domainname</string>
-    <string name="settings_scan_resolver_qr_title">TV-Bypass-QR scannen</string>
-    <string name="settings_scan_resolver_qr_summary">Öffne die Kamera und scanne den auf dem TV angezeigten QR-Code</string>
-    <string name="settings_scan_resolver_invalid_qr">Dieser QR-Code ist kein StreamFlix-Bypass-Link.</string>
-    <string name="settings_scan_resolver_failed">QR-Scanner konnte auf diesem Gerät nicht gestartet werden.</string>
+
     <string name="settings_category_provider_url_manual">Manuell eingeben</string>
     <string name="player_skip_intro">Intro überspringen</string>
     <string name="voice_error_clear">Suchverlauf löschen</string>
@@ -449,7 +446,7 @@
     <string name="settings_parental_unlocked">Kindersicherung entsperrt.</string>
     <string name="settings_parental_tmdb_disable_blocked">Du musst die Kindersicherung entsperren, bevor du TMDb deaktivierst.</string>
     <string name="settings_screen_content_summary">TMDb-Zugriff, Kindersicherung und Inhaltsbeschränkungen</string>
-    <string name="settings_screen_network_summary">DNS, TV-Bypass und Schluessel fuer Untertitel-Dienste</string>
+    <string name="settings_screen_network_summary">DNS und Schluessel fuer Untertitel-Dienste</string>
     <string name="settings_provider_connection_title">Einstellungen fuer aktuellen Anbieter</string>
     <string name="settings_screen_provider_summary">Hauptdomain, Portal und anbieterspezifische Wiederherstellungsoptionen</string>
     <string name="settings_screen_provider_summary_with_name">Domain, Portal und anbieterspezifische Wiederherstellungsoptionen für %1$s</string>
@@ -473,8 +470,7 @@
     <string name="settings_app_language_spanish">Spanisch</string>
     <string name="settings_app_language_french">Franzoesisch</string>
     <string name="settings_app_language_italian">Italienisch</string>
-    <string name="settings_scan_resolver_camera_permission_denied">Kameraberechtigung ist erforderlich, um den QR-Code zu scannen.</string>
-    <string name="settings_scan_resolver_camera_unavailable">Auf diesem Geraet ist keine Kamera verfuegbar.</string>
+
     <string name="backup_import_action">Importieren</string>
     <string name="backup_delete_action">Loeschen</string>
     <string name="backup_delete_confirm_title">Backup loeschen</string>
@@ -556,9 +552,15 @@
     <string name="tmdb_category_hulu">Beliebt bei Hulu</string>
     <string name="tmdb_category_apple">Beliebt bei Apple TV+</string>
     <string name="tmdb_category_hbo">Beliebt bei HBO</string>
+    <string name="settings_enable_recently_watched_title">Zeige Kürzlich gesehen auf Startseite</string>
     <string name="settings_enable_recently_watched_summary">Zeigt die Liste der zuletzt angesehenen Filme und Serien auf der Startseite an.</string>
     <string name="settings_clear_recently_watched_title">Zuletzt angesehenen Verlauf löschen</string>
     <string name="settings_clear_recently_watched_summary">Entfernt alle gespeicherten Elemente aus der Liste der zuletzt angesehenen Titel.</string>
     <string name="settings_clear_recently_watched_dialog_message">Möchtest du deinen gesamten Verlauf der zuletzt angesehenen Titel wirklich löschen?</string>
     <string name="settings_clear_recently_watched_done">Zuletzt angesehener Verlauf gelöscht.</string>
+
+    <!-- VAVOO_DOMAIN_ROTATION_V1 -->
+    <string name="settings_vavoo_domain_next">Weiter</string>
+    <string name="settings_vavoo_domain_next_summary">Nächste bekannte Vavoo-Domain prüfen und die erste erreichbare übernehmen</string>
+    <string name="settings_vavoo_domain_next_updated">Vavoo-Domain übernommen: %1$s</string>
 </resources>

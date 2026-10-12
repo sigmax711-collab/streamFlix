@@ -104,6 +104,7 @@ interface Provider {
             GuardaSerieProvider to ProviderSupport(movies = true, tvShows = true),
             EinschaltenProvider to ProviderSupport(movies = true, tvShows = false),
             KellerKinoProvider to ProviderSupport(movies = true, tvShows = false),
+            KinoGerProvider to ProviderSupport(movies = true, tvShows = true),
             HDFilmeProvider to ProviderSupport(movies = true, tvShows = true),
             MEGAKinoProvider to ProviderSupport(movies = true, tvShows = true),
             FilmyOnlineCcProvider to ProviderSupport(movies = true, tvShows = true),

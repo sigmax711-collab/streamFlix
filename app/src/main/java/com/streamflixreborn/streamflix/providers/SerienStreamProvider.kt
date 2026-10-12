@@ -3,10 +3,12 @@ package com.streamflixreborn.streamflix.providers
 import android.annotation.SuppressLint
 import android.net.Uri
 import android.content.Context
+import android.content.pm.PackageManager
 import android.webkit.CookieManager
 import android.util.Base64
 import android.util.Log
 import com.tanasi.retrofit_jsoup.converter.JsoupConverterFactory
+import com.streamflixreborn.streamflix.BuildConfig
 import com.streamflixreborn.streamflix.adapters.AppAdapter
 import com.streamflixreborn.streamflix.database.SerienStreamDatabase
 import com.streamflixreborn.streamflix.database.dao.TvShowDao
@@ -84,9 +86,6 @@ object SerienStreamProvider : Provider {
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
-        if (webViewResolver == null) {
-            webViewResolver = WebViewResolver(appContext, requireTvConfirmation = true)
-        }
         if (tvShowDao == null) {
             tvShowDao = SerienStreamDatabase.getInstance(context).tvShowDao()
         }
@@ -486,6 +485,15 @@ object SerienStreamProvider : Provider {
                 if (!existingUrl.isNullOrBlank() && !isSerienStreamUrl(existingUrl)) {
                     return@withLock existingUrl
                 }
+            }
+
+            // Mobile completes this bypass in PlayerMobileFragment's dedicated
+            // BypassWebViewActivity. Keep the TV challenge in WebViewResolver.
+            val isTv = BuildConfig.APP_LAYOUT == "tv" ||
+                    (BuildConfig.APP_LAYOUT != "mobile" &&
+                            appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
+            if (!isTv) {
+                return@withLock url
             }
 
             val result = getWebViewResolver().getResult(

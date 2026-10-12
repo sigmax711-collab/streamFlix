@@ -343,7 +343,6 @@
     <string name="settings_immersive_mode_on">Activé (Barres cachées)</string>
     <string name="settings_immersive_mode_off">Désactivé (Barres visibles)</string>
 
-
     <string name="player_brightness">Luminosité</string>
     <string name="player_volume">Volume</string>
     <string name="percentage_format">%d%%</string>
@@ -408,10 +407,7 @@
     <string name="settings_force_extra_buffer_summary">Activer la mise en cache supplémentaire par défaut</string>
     <string name="settings_category_poseidon">Paramètres Poseidonhd2</string>
     <string name="settings_category_poseidon_domain">Nom de domaine Poseidonhd2</string>
-    <string name="settings_scan_resolver_qr_title">Scanner le QR de contournement TV</string>
-    <string name="settings_scan_resolver_qr_summary">Ouvrir la caméra et scanner le QR affiché sur la TV</string>
-    <string name="settings_scan_resolver_invalid_qr">Ce code QR n\'est pas un lien de contournement StreamFlix.</string>
-    <string name="settings_scan_resolver_failed">Impossible de démarrer le scanner QR sur cet appareil.</string>
+
     <string name="settings_category_provider_url_manual">Saisir manuellement</string>
     <string name="player_skip_intro">Passer l\'intro</string>
     <string name="voice_error_clear">Effacer l\'historique de recherche</string>
@@ -454,7 +450,7 @@
     <string name="settings_parental_unlocked">Contrôle parental déverrouillé.</string>
     <string name="settings_parental_tmdb_disable_blocked">Vous devez déverrouiller le contrôle parental avant de désactiver TMDb.</string>
     <string name="settings_screen_content_summary">Acces TMDb, controle parental et restrictions de contenu</string>
-    <string name="settings_screen_network_summary">DNS, contournement TV et cles des services de sous titres</string>
+    <string name="settings_screen_network_summary">DNS et cles des services de sous titres</string>
     <string name="settings_provider_connection_title">Parametres du fournisseur actuel</string>
     <string name="settings_screen_provider_summary">Domaine principal, portail et options de recuperation specifiques au fournisseur</string>
     <string name="settings_screen_provider_summary_with_name">Domaine, portail et options de recuperation specifiques a %1$s</string>
@@ -478,8 +474,7 @@
     <string name="settings_app_language_spanish">Espagnol</string>
     <string name="settings_app_language_french">Francais</string>
     <string name="settings_app_language_italian">Italien</string>
-    <string name="settings_scan_resolver_camera_permission_denied">L autorisation camera est necessaire pour scanner le code QR.</string>
-    <string name="settings_scan_resolver_camera_unavailable">Aucune camera n est disponible sur cet appareil.</string>
+
     <string name="backup_import_action">Importer</string>
     <string name="backup_delete_action">Supprimer</string>
     <string name="backup_delete_confirm_title">Supprimer la sauvegarde</string>
