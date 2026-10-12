@@ -2488,4 +2488,148 @@ class SettingsTvFragment : LeanbackPreferenceFragmentCompat() {
         updateParentalControlPreferenceState()
     }
 
+    private fun showCreateProfileDialogTv() {
+        val input = EditText(requireContext()).apply {
+            hint = getString(R.string.profile_name_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.profile_create_title)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) {
+                    lifecycleScope.launch {
+                        ProfileManager.createProfile(name)
+                        Toast.makeText(requireContext(), R.string.profile_created, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showRenameProfileDialogTv(profile: Profile) {
+        val input = EditText(requireContext()).apply {
+            setText(profile.name)
+            hint = getString(R.string.profile_name_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.profile_rename_title)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotBlank()) {
+                    lifecycleScope.launch {
+                        ProfileManager.renameProfile(profile.id, newName)
+                        Toast.makeText(requireContext(), R.string.profile_renamed, Toast.LENGTH_SHORT).show()
+                        updateOverviewLabels()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showProfileManagementDialogTv() {
+        lifecycleScope.launch {
+            val profiles = ProfileManager.getAllProfiles()
+            val names = profiles.map { it.name }.toTypedArray()
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.profile_manage_title)
+                .setItems(names) { _, which ->
+                    if (which in profiles.indices) {
+                        showProfileActionsDialogTv(profiles[which], profiles.size)
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun showProfileActionsDialogTv(profile: Profile, profileCount: Int) {
+        val items = mutableListOf<String>().apply {
+            add(getString(R.string.profile_action_switch))
+            add(getString(R.string.profile_action_rename))
+            add(getString(R.string.profile_action_color))
+            if (profileCount > 1) add(getString(R.string.profile_action_delete))
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(profile.name)
+            .setItems(items.toTypedArray()) { _, which ->
+                when (items[which]) {
+                    getString(R.string.profile_action_switch) -> {
+                        if (profile.id == ProfileManager.activeProfileId) {
+                            switchProfileFromSettings(profile)
+                        } else {
+                            ProfileSwitchPinGuard.verifyCurrentProfile(requireContext()) {
+                                switchProfileFromSettings(profile)
+                            }
+                        }
+                    }
+                    getString(R.string.profile_action_rename) -> showRenameProfileDialogTv(profile)
+                    getString(R.string.profile_action_color) -> showProfileColorDialogTv(profile)
+                    getString(R.string.profile_action_delete) -> showDeleteProfileDialogTv(profile)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun switchProfileFromSettings(profile: Profile) {
+        if (!isAdded) return
+        val oldProfileId = ProfileManager.activeProfileId
+        val oldLang = oldProfileId?.let { AppLanguageManager.getProfileLanguage(requireContext(), it) }
+        val oldTheme = UserPreferences.selectedTheme
+        lifecycleScope.launch {
+            ProfileManager.switchToProfile(profile.id)
+            val newLang = AppLanguageManager.getProfileLanguage(requireContext(), profile.id)
+            val newTheme = UserPreferences.selectedTheme
+            if (newLang != (oldLang ?: AppLanguageManager.SYSTEM_LANGUAGE) || newTheme != oldTheme) {
+                requireActivity().apply {
+                    finish()
+                    startActivity(Intent(this, this::class.java))
+                }
+            } else {
+                (requireActivity() as? MainTvActivity)?.recreateProviderHome()
+            }
+        }
+    }
+
+    private fun showDeleteProfileDialogTv(profile: Profile) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.profile_delete_title)
+            .setMessage(getString(R.string.profile_delete_message, profile.name))
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                lifecycleScope.launch {
+                    val success = ProfileManager.deleteProfile(profile.id)
+                    if (success) {
+                        Toast.makeText(requireContext(), R.string.profile_deleted, Toast.LENGTH_SHORT).show()
+                        if (ProfileManager.activeProfile?.id == profile.id) {
+                            requireActivity().apply {
+                                finish()
+                                startActivity(Intent(this, this::class.java))
+                            }
+                        }
+                    } else {
+                        Toast.makeText(requireContext(), R.string.profile_delete_error, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showProfileColorDialogTv(profile: Profile) {
+        ProfileColorPicker.show(requireContext(), profile.avatarColor) { color ->
+            lifecycleScope.launch {
+                if (ProfileManager.setProfileColor(profile.id, color)) {
+                    Toast.makeText(requireContext(), R.string.profile_color_changed, Toast.LENGTH_SHORT).show()
+                    if (profile.id == ProfileManager.activeProfileId) requireActivity().recreate()
+                }
+            }
+        }
+    }
+
 }
