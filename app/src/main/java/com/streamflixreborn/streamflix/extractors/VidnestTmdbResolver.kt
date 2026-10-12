@@ -957,7 +957,7 @@ object VidnestTmdbResolver {
 
     private object Constants {
         const val VIDNEST_V2_SECRET =
-            "wSnEvGgWkkxb7nO1yyFgMxhDvogX_Q7Dr0Fi1E4qvn0"
+            "M0th3rFuk3rG4yB4st4rd_wSnX7qV9kL2pR8yQm4zN1Fg"
 
         const val VIDNEST_TAG =
             "VidnestModern"

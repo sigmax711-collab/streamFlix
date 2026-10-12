@@ -173,9 +173,11 @@ object NetPrimeProvider : Provider {
         server.video?.let { return it }
 
         if (server.id == "netprime-vidnest") {
-            VidnestTmdbResolver
+            return VidnestTmdbResolver
                 .extract(server.src)
-                ?.let { return it }
+                ?: throw Exception(
+                    "Vidnest TMDb resolver could not resolve ${server.src}"
+                )
         }
 
         return Extractor.extract(
