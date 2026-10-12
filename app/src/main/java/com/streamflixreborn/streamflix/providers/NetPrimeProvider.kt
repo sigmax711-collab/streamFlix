@@ -7,6 +7,8 @@ import com.streamflixreborn.streamflix.extractors.VidLinkExtractor
 import com.streamflixreborn.streamflix.extractors.VidnestTmdbResolver
 import com.streamflixreborn.streamflix.extractors.VideasyExtractor
 import com.streamflixreborn.streamflix.extractors.VidrockExtractor
+import com.streamflixreborn.streamflix.extractors.VidloveExtractor
+import com.streamflixreborn.streamflix.extractors.VidemExtractor
 import com.streamflixreborn.streamflix.models.Category
 import com.streamflixreborn.streamflix.models.Episode
 import com.streamflixreborn.streamflix.models.Genre
@@ -123,6 +125,22 @@ object NetPrimeProvider : Provider {
             }.getOrDefault(emptyList())
         }
 
+        val vidloveDeferred = async(Dispatchers.IO) {
+            runCatching {
+                VidloveExtractor()
+                    .servers(videoType)
+                    .map { it.asNetPrime(it.name.replace("Vidlove", "111Movies.net")) }
+            }.getOrDefault(emptyList())
+        }
+
+        val videmDeferred = async(Dispatchers.IO) {
+            runCatching {
+                VidemExtractor()
+                    .servers(videoType, "en")
+                    .map { it.asNetPrime(it.name) }
+            }.getOrDefault(emptyList())
+        }
+
         val videasyDeferred = async(Dispatchers.IO) {
             runCatching {
                 VideasyExtractor()
@@ -162,6 +180,8 @@ object NetPrimeProvider : Provider {
             .asNetPrime("2Embed")
 
         servers += vidrockDeferred.await()
+        servers += vidloveDeferred.await()
+        servers += videmDeferred.await()
         servers += videasyDeferred.await()
 
         servers.distinctBy { it.id }

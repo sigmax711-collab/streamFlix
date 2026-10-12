@@ -120,7 +120,9 @@ abstract class Extractor {
             ZillaExtractor(),
             PDrainExtractor(),
             MaxstreamExtractor(),
-            VidxGoExtractor()
+            VidxGoExtractor(),
+            VidloveExtractor(),
+            VidemExtractor()
         )
 
         suspend fun extract(link: String, server: Video.Server? = null): Video {

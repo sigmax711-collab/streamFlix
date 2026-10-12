@@ -234,15 +234,20 @@ object MStreamProvider : Provider {
         }
         if (page > 1) return emptyList()
 
-        val document = getService().getSearch(query)
-        val json = JSONObject(document.string())
-        return (json.getJSONArray("results").map {
-            if (it?.optBoolean("is_series") == true) getTvShowObj(it)
-            else if (it?.getString("model_type") == "movie" || it?.getString("model_type") == "title") getMovieObj(
-                it, true
-            )
-            else null
-        }).mapNotNull { it }
+        val document = getService().getSearchHtml(query).string()
+        val match = Regex("""window\.bootstrapData\s*=\s*(\{.*?\});""").find(document)
+        if (match != null) {
+            val json = JSONObject(match.groupValues[1])
+            val results = json.optJSONObject("loaders")?.optJSONObject("searchPage")?.optJSONArray("results") ?: JSONArray()
+            return (results.map {
+                if (it?.optBoolean("is_series") == true) getTvShowObj(it)
+                else if (it?.getString("model_type") == "movie" || it?.getString("model_type") == "title") getMovieObj(
+                    it, true
+                )
+                else null
+            }).mapNotNull { it }
+        }
+        return emptyList()
     }
 
     override suspend fun getMovies(page: Int): List<Movie> {
@@ -440,8 +445,8 @@ object MStreamProvider : Provider {
             @Path("episodeNumber") episodeNumber: String
         ): ResponseBody
 
-        @GET("/api/v1/search/{searchText}?loader=searchPage")
-        suspend fun getSearch(@Path("searchText") id: String): ResponseBody
+        @GET("/search/{searchText}")
+        suspend fun getSearchHtml(@Path("searchText") id: String): ResponseBody
 
         @GET("/api/v1/people/{personId}?loader=personPage")
         suspend fun getPerson(@Path("personId") id: String): ResponseBody

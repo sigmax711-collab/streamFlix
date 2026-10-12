@@ -17,7 +17,9 @@ import com.streamflixreborn.streamflix.extractors.FrembedExtractor
 import com.streamflixreborn.streamflix.extractors.VidflixExtractor
 import com.streamflixreborn.streamflix.extractors.VidrockExtractor
 import com.streamflixreborn.streamflix.extractors.VideasyExtractor
+import com.streamflixreborn.streamflix.extractors.VidloveExtractor
 import com.streamflixreborn.streamflix.extractors.PrimeSrcExtractor
+import com.streamflixreborn.streamflix.extractors.VidemExtractor
 import com.streamflixreborn.streamflix.models.Category
 import com.streamflixreborn.streamflix.models.Episode
 import com.streamflixreborn.streamflix.models.Genre
@@ -822,6 +824,7 @@ class TmdbProvider(override val language: String) : Provider {
                 // Solo server francesi
                 servers.addAll(FrembedExtractor(UserPreferences.getProviderCache(FrembedProvider, UserPreferences.PROVIDER_URL)).servers(videoType))
                 servers.addAll(AfterDarkExtractor(UserPreferences.getProviderCache(AfterDarkProvider, UserPreferences.PROVIDER_URL)).servers(videoType))
+                servers.addAll(VidemExtractor().servers(videoType, "fr"))
             }
             "es" -> {
                 // TMDB Spagnolo: Utilizza ESCLUSIVAMENTE server certificati con audio spagnolo ([LAT] o [CAST])
@@ -903,6 +906,7 @@ class TmdbProvider(override val language: String) : Provider {
                         }
                     }
                     servers.addAll(deferred.awaitAll().flatten())
+                    servers.addAll(VidemExtractor().servers(videoType, "es"))
                 }
             }
             else -> {
@@ -926,6 +930,8 @@ class TmdbProvider(override val language: String) : Provider {
 
                 if (language == "en") {
                     servers.addAll(1, VideasyExtractor().servers(videoType, language))
+                    servers.addAll(VidemExtractor().servers(videoType, "en"))
+                    servers.addAll(VidloveExtractor().servers(videoType))
                 }
             }
         }

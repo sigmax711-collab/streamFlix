@@ -35,9 +35,11 @@ import retrofit2.http.Query
 import retrofit2.http.Url
 import kotlin.collections.map
 
-object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
+// object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
+object FrembedProvider : Provider, ProviderConfigUrl {
     override val name = "Frembed"
 
+    /*
     override val defaultPortalUrl: String = "https://audin213.com/"
 
     override val portalUrl: String = defaultPortalUrl
@@ -45,6 +47,7 @@ object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
             val cachePortalURL = UserPreferences.getProviderCache(this, UserPreferences.PROVIDER_PORTAL_URL)
             return cachePortalURL.ifEmpty { field }
         }
+    */
 
     override val defaultBaseUrl: String = "https://frembed.casa/"
     override val baseUrl: String = defaultBaseUrl
@@ -447,12 +450,14 @@ object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
     /**
      * Initializes the service with the current domain URL.
      * This function is necessary because the provider's domain frequently changes.
-     * We fetch the latest URL from a dedicated website that tracks these changes.
+     * We fetch the latest URL from the /api/domain endpoint.
      */
     override suspend fun onChangeUrl(forceRefresh: Boolean): String {
         changeUrlMutex.withLock {
             if (forceRefresh || UserPreferences.getProviderCache(this,UserPreferences.PROVIDER_AUTOUPDATE) != "false") {
                 val addressService = Service.buildAddressFetcher()
+                /*
+                // OLD PORTAL FETCH LOGIC
                 try {
                     val document = addressService.getPortalHome()
 
@@ -481,6 +486,27 @@ object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
                     }
                 } catch (e: Exception) {
                     Log.w("FrembedProvider", "Portal fetch failed: ${e.message}. Trying redirect fallback resolution.")
+                }
+                */
+                try {
+                    val serviceBase = Service.build(defaultBaseUrl)
+                    val response = serviceBase.getApiDomain()
+                    val newDomain = response.domain
+                    val resolvedUrl = "https://$newDomain/"
+                    Log.d("FrembedProvider", "API Domain resolved to: $resolvedUrl")
+
+                    UserPreferences.setProviderCache(
+                        this,
+                        UserPreferences.PROVIDER_URL,
+                        resolvedUrl
+                    )
+                    UserPreferences.setProviderCache(
+                        this,
+                        UserPreferences.PROVIDER_LOGO,
+                        resolvedUrl + "favicon-32x32.png"
+                    )
+                } catch (e: Exception) {
+                    Log.w("FrembedProvider", "API Domain fetch failed: ${e.message}. Trying redirect fallback resolution.")
                     try {
                         val currentOrFallback = if (baseUrl.isNotEmpty()) baseUrl else defaultBaseUrl
                         Log.d("FrembedProvider", "Trying fallback redirect resolution for: $currentOrFallback")
@@ -541,7 +567,7 @@ object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
 
             fun buildAddressFetcher(): Service {
                 val addressRetrofit = Retrofit.Builder()
-                    .baseUrl(portalUrl)
+                    .baseUrl(defaultBaseUrl)
                     .addConverterFactory(JsoupConverterFactory.create())
                     .client(client)
 
@@ -651,5 +677,14 @@ object FrembedProvider : Provider, ProviderPortalUrl, ProviderConfigUrl {
             @Path("id") id: String,
             @Header("user-agent") user_agent: String = "Mozilla"
         ): List<FrembedSeasonResponse>
+
+        @GET("api/domain")
+        suspend fun getApiDomain(): FrembedDomainResponse
     }
+
+    data class FrembedDomainResponse(
+        val domain: String,
+        val status: String,
+        val timestamp: Long
+    )
 }

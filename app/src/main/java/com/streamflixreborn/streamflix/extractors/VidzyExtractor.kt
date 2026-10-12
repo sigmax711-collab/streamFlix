@@ -43,25 +43,43 @@ class VidzyExtractor : Extractor() {
         val service = Service.build(mainUrl)
 
         val document = service.get(link)
+        val html = document.html()
+        var streamUrl: String? = null
 
-        val packedJS = Regex("""(\}\s*\('.*?'\.split\('\|'\))""")
-            .find(document.html().substringAfter("function(p,a,c,k,e,d){"))
-            ?.groupValues?.get(1)
-            ?: throw Exception("Packed JS not found")
+        val payloadMatch = Regex("""src:\s*\(function\([a-zA-Z]+\).*?\}\)\(["']([^"']+)["']\)""", RegexOption.DOT_MATCHES_ALL).find(html)
+        if (payloadMatch != null) {
+            val payload = payloadMatch.groupValues[1]
+            val domain = java.net.URI(link).host
+            
+            val calcMatch = Regex("""width:calc\(1in\s*\+\s*(\d+)px\)""").find(html)
+            val pxVal = calcMatch?.groupValues?.get(1)?.toIntOrNull() ?: 156
+            val bc = (96 + pxVal) / 2
+            
+            streamUrl = decryptSource(payload, domain, bc)
+        }
 
-        val unPacked = JsUnpacker(packedJS).unpack()
-            ?: throw Exception("Unpacked is null")
-
-        val fileMatch = Regex("""src\s*:\s*["']([^"']+)["']""").find(unPacked)
-        val streamUrl = fileMatch?.groupValues?.get(1)
-            ?: throw Exception("No src found")
+        if (streamUrl == null) throw Exception("Can't retrieve source")
 
         return Video(
-            source = streamUrl ?: throw Exception("Can't retrieve source"),
+            source = streamUrl,
             headers = mapOf("Referer" to mainUrl),
-            subtitles = extractSubtitles(unPacked),
+            subtitles = extractSubtitles(html),
             useServerSubtitleSetting = true
         )
+    }
+
+    private fun decryptSource(payload: String, domain: String, bc: Int): String {
+        var h = bc
+        for (char in domain) h = (h + char.code) and 255
+
+        val decoded = android.util.Base64.decode(payload, android.util.Base64.DEFAULT)
+        val sb = java.lang.StringBuilder(decoded.size)
+
+        for (i in decoded.indices.reversed()) {
+            val kk = (0x3d + (decoded.lastIndex - i) * 89 + h) and 255
+            sb.append((decoded[i].toInt() xor kk).toChar())
+        }
+        return sb.toString()
     }
 
     private interface Service {

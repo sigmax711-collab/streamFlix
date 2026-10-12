@@ -223,59 +223,17 @@ object CineHaxProvider : Provider {
     // endregion
 
     // region Detail
-    //
-    // cinehax.com used to server-render a schema.org JSON-LD block with the title/overview/
-    // rating/genres, but that block disappeared from /watch/ pages (verified against multiple
-    // ids with cache-busting - not a stale-cache fluke). The same data is still on the page in
-    // other forms though: the title/backdrop are query params on the "data-url" embed link (the
-    // same one getServers() already reads), the overview sits right after an <h3>Descripción</h3>,
-    // and rating/genres/release-year are plain DOM text. [parseWatchPageFromDom] reads those
-    // directly. [parseWatchPage] still tries the JSON-LD first in case they bring it back.
-
+    
     private data class WatchPageMeta(
-        val title: String,
         val overview: String?,
         val poster: String?,
-        val backdrop: String?,
         val rating: Double?,
         val released: String?,
         val genres: List<Genre>,
         val trailer: String?,
     )
-
-    private fun parseWatchPage(html: String): WatchPageMeta {
-        return parseWatchPageFromJsonLd(html)?.takeIf { it.title.isNotBlank() }
-            ?: parseWatchPageFromDom(html)
-    }
-
-    private fun parseWatchPageFromJsonLd(html: String): WatchPageMeta? {
-        val json = Regex("""<script type="application/ld\+json">\s*(\{.*?\})\s*</script>""", RegexOption.DOT_MATCHES_ALL)
-            .find(html)?.groupValues?.get(1)?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?: return null
-
-        val genres = json.optJSONArray("genre")?.let { arr ->
-            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf(String::isNotEmpty) }
-        }.orEmpty().map { Genre(id = it.lowercase(), name = it) }
-
-        return WatchPageMeta(
-            title = json.optString("name"),
-            overview = json.optString("description").takeIf { it.isNotEmpty() },
-            poster = extractPoster(html),
-            backdrop = json.optString("image").takeIf { it.isNotEmpty() },
-            rating = json.optJSONObject("aggregateRating")?.optDouble("ratingValue")?.takeIf { !it.isNaN() },
-            released = json.optString("datePublished").takeIf { it.isNotEmpty() }
-                ?: json.optString("startDate").takeIf { it.isNotEmpty() },
-            genres = genres,
-            trailer = extractTrailer(html),
-        )
-    }
-
+    
     private fun parseWatchPageFromDom(html: String): WatchPageMeta {
-        val embedDataUrl = Regex("""data-url="(https://$UNLIMPLAY_HOST[^"]*)"""")
-            .find(html)?.groupValues?.get(1)?.replace("&#038;", "&")
-            ?: throw Exception("No se pudo leer la metadata de CineHax")
-        val embedUri = Uri.parse(embedDataUrl)
-
         val overview = Regex("""Descripción</h3>\s*<p[^>]*>([^<]*)</p>""")
             .find(html)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
 
@@ -290,12 +248,10 @@ object CineHaxProvider : Provider {
             .filter { it.isNotEmpty() }
             .map { Genre(id = it.lowercase(), name = it) }
             .toList()
-
+            
         return WatchPageMeta(
-            title = embedUri.getQueryParameter("title").orEmpty(),
             overview = overview,
             poster = extractPoster(html),
-            backdrop = embedUri.getQueryParameter("backdrop"),
             rating = rating,
             released = released,
             genres = genres,
@@ -312,27 +268,26 @@ object CineHaxProvider : Provider {
     }
 
     override suspend fun getMovie(id: String): Movie {
-        val meta = parseWatchPage(get("$baseUrl/watch/?type=movie&id=$id"))
-        
-        // Fetch missing title/backdrop from TMDb since CineHax removed them from the HTML
+        val html = get("$baseUrl/ver/?tipo=pelicula&id=$id")
+        val meta = parseWatchPageFromDom(html)
         val tmdb = runCatching { TMDb3.Movies.details(id.toInt(), language = language) }.getOrNull()
         
         return Movie(
             id = id,
-            title = tmdb?.title ?: meta.title,
+            title = tmdb?.title ?: "",
             overview = tmdb?.overview ?: meta.overview,
             released = meta.released,
             rating = meta.rating,
             poster = meta.poster,
-            banner = tmdb?.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" } ?: meta.backdrop,
+            banner = tmdb?.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" },
             trailer = meta.trailer,
             genres = meta.genres,
         )
     }
 
     override suspend fun getTvShow(id: String): TvShow {
-        val html = get("$baseUrl/watch/?type=tv&id=$id&season=1&episode=1")
-        val meta = parseWatchPage(html)
+        val html = get("$baseUrl/ver/?tipo=serie&id=$id")
+        val meta = parseWatchPageFromDom(html)
         // The season chips and every episode link on the page both carry "season=N"; collecting
         // every distinct N this way is more robust than pinning to one exact CSS structure.
         val seasonNumbers = Regex("""season=(\d+)""").findAll(html)
@@ -346,12 +301,12 @@ object CineHaxProvider : Provider {
 
         return TvShow(
             id = id,
-            title = tmdb?.name ?: meta.title,
+            title = tmdb?.name ?: "",
             overview = tmdb?.overview ?: meta.overview,
             released = meta.released,
             rating = meta.rating,
             poster = meta.poster,
-            banner = tmdb?.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" } ?: meta.backdrop,
+            banner = tmdb?.backdropPath?.let { "https://image.tmdb.org/t/p/original$it" },
             trailer = meta.trailer,
             genres = meta.genres,
             seasons = seasonNumbers.map { number -> Season(id = "$id-$number", number = number, title = "Temporada $number") },
@@ -391,32 +346,23 @@ object CineHaxProvider : Provider {
     // region Playback
 
     override suspend fun getServers(id: String, videoType: Video.Type): List<Video.Server> {
-        val watchUrl = when (videoType) {
-            is Video.Type.Movie -> "$baseUrl/ver/?tipo=pelicula&id=$id"
+        val embedUrl = when (videoType) {
+            is Video.Type.Movie -> "https://$UNLIMPLAY_HOST/f/embed/movie/$id"
             is Video.Type.Episode -> {
                 val parts = id.split("|")
-                val tvId = parts.getOrNull(0) ?: return emptyList()
+                val tvId = parts.getOrNull(0) ?: ""
                 val season = parts.getOrNull(1) ?: "1"
                 val episode = parts.getOrNull(2) ?: "1"
-                "$baseUrl/ver/?tipo=serie&id=$tvId&season=$season&episode=$episode"
+                "https://$UNLIMPLAY_HOST/f/embed/tv/$tvId/$season/$episode"
             }
         }
 
-        val doc = Jsoup.parse(get(watchUrl))
-        val embedPageUrls = doc.select("[data-url*=$UNLIMPLAY_HOST]")
-            .map { it.attr("data-url") }
-            .distinct()
-        if (embedPageUrls.isEmpty()) return emptyList()
-
-        val servers = mutableListOf<Video.Server>()
-        for (embedPageUrl in embedPageUrls) {
-            try {
-                servers.addAll(resolveUnlimplayServers(embedPageUrl))
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to resolve embed page $embedPageUrl: ${e.message}")
-            }
+        return try {
+            resolveUnlimplayServers(embedUrl)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to resolve embed page $embedUrl: ${e.message}")
+            emptyList()
         }
-        return servers
     }
 
     private fun resolveUnlimplayServers(embedPageUrl: String): List<Video.Server> {
